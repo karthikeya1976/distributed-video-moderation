@@ -6,3 +6,4 @@ frames/
 node_modules/
 .next/
 frontend/.env*
+backend/venv/
