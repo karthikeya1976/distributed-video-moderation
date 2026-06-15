@@ -19,11 +19,11 @@ directly on Windows via a Python venv (`backend/venv`). Ports: API on 8088
 (8080 was already in use), Redis mapped to 6380, Mongo to 27018.
 
 ## Milestone 2: Multi-Pillar Moderation Layer
-- [ ] Mock adult_content pillar
-- [ ] Mock ai_deepfake pillar
-- [ ] Mock copyright_match pillar
-- [ ] Aggregator combining pillar scores into Approved/Flagged/Blocked
-- [ ] Status endpoint returns full breakdown
+- [x] Mock adult_content pillar
+- [x] Mock ai_deepfake pillar
+- [x] Mock copyright_match pillar
+- [x] Aggregator combining pillar scores into approved/flagged/blocked
+- [x] Status endpoint returns full breakdown (per-pillar scores, flags, reasons)
 
 ## Milestone 3: Frontend Dashboard + Scaling Demo
 - [ ] Next.js app with upload page
