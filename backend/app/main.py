@@ -3,11 +3,19 @@ import tempfile
 import uuid
 
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 from app import db, storage
 from app.tasks import process_video
 
 app = FastAPI(title="Video Moderation API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -30,6 +38,14 @@ async def upload_video(file: UploadFile) -> dict:
     process_video.delay(job_id)
 
     return {"job_id": job_id}
+
+
+@app.get("/videos")
+def list_videos(limit: int = 50) -> list:
+    jobs = db.list_jobs(limit)
+    for j in jobs:
+        j["job_id"] = j.pop("_id")
+    return jobs
 
 
 @app.get("/videos/{job_id}/status")

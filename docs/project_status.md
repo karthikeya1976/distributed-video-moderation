@@ -26,8 +26,13 @@ directly on Windows via a Python venv (`backend/venv`). Ports: API on 8088
 - [x] Status endpoint returns full breakdown (per-pillar scores, flags, reasons)
 
 ## Milestone 3: Frontend Dashboard + Scaling Demo
-- [ ] Next.js app with upload page
-- [ ] Dashboard page listing jobs with status + details
-- [ ] GET /videos list endpoint
-- [ ] Worker scaling demo
-- [ ] Final docs pass + README
+- [x] GET /videos list endpoint added to FastAPI + CORS middleware
+- [x] Next.js 16 app scaffolded (App Router, TypeScript, Tailwind CSS)
+- [x] lib/api.ts typed API client (uploadVideo, listJobs, getJobStatus + Job type)
+- [x] Upload page (/) with file picker, spinner, error state
+- [x] Dashboard page (/dashboard) — jobs table with 3s polling
+- [x] Per-row expandable detail: pillar score bars + flag timeline + reasons
+- [x] Status/verdict color badges (approved=green, flagged=amber, blocked=red)
+- [x] README.md with run instructions + interview cheat sheet
+- [x] Final docs pass (architecture.md, changelog.md updated)
+- [ ] Worker scaling demo (run manually: start 3 worker terminals, upload 5+ videos)

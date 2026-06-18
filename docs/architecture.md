@@ -98,11 +98,21 @@ not the orchestration logic in `tasks.py`.
 - Rule order: any "blocked" pillar -> `blocked`; else any "flagged" pillar ->
   `flagged`; else `approved`
 
-### Frontend — Next.js Dashboard (Milestone 3, `frontend/`)
-- Upload page: posts to `POST /videos`
-- Dashboard page: polls `GET /videos`, shows a table of jobs with status
-  badges and a details view per job showing per-pillar scores and a
-  timestamped flag timeline
+### Frontend — Next.js Dashboard (`frontend/`)
+- **Framework**: Next.js 16 (App Router), TypeScript, Tailwind CSS
+- **API client** (`lib/api.ts`): typed wrapper around all three backend
+  endpoints; single place to change `API` base URL
+- **Upload page** (`app/page.tsx` → `components/upload-form.tsx`):
+  file picker, calls `POST /videos`, shows spinner during upload, redirects
+  to `/dashboard` on success
+- **Dashboard page** (`app/dashboard/page.tsx` → `components/jobs-table.tsx`):
+  polls `GET /videos` every 3 seconds while any job is still in
+  `pending/processing` state; stops polling once all jobs are done
+- **Job detail** (`components/job-detail.tsx`): toggled per-row — shows
+  three pillar score bars (color-coded by threshold: green/amber/red),
+  flag timeline (`[HH:MM:SS] — label`), and policy trigger reasons
+- **Verdict badges** (in `components/ui/badge.tsx`): green=approved,
+  amber=flagged, red=blocked, blue=processing, gray=pending
 
 ## Local Development Topology
 
