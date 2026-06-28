@@ -96,7 +96,9 @@ def upload_and_wait(label: str) -> dict:
     name, content = fake_video(label)
     code, body = multipart_upload(name, content)
     assert code == 200, f"Upload failed: {code} — {body}"
-    return wait_for_done(body["job_id"])
+    # POST /videos now returns {status, task_id} per the flow-graph spec
+    task_id = body.get("task_id") or body.get("job_id")
+    return wait_for_done(task_id)
 
 
 # ── Test definitions ──────────────────────────────────────────────────────────
@@ -108,24 +110,25 @@ def test_health():
     assert body == {"status": "ok"}, f"Body: {body}"
 
 
-@register("Upload returns a valid UUID job_id")
-def test_upload_returns_job_id():
+@register("Upload returns {status: processing, task_id: <uuid>}")
+def test_upload_returns_task_id():
     name, content = fake_video("upload_test")
     code, body = multipart_upload(name, content)
     assert code == 200, f"Upload returned {code}: {body}"
-    assert "job_id" in body, f"No job_id in: {body}"
-    uuid.UUID(body["job_id"])  # raises ValueError if not a valid UUID
+    assert body.get("status") == "processing", f"Expected status=processing, got: {body}"
+    assert "task_id" in body, f"No task_id in: {body}"
+    uuid.UUID(body["task_id"])  # raises ValueError if not a valid UUID
 
 
 @register("Uploaded job is visible in status endpoint immediately")
 def test_job_visible_after_upload():
     name, content = fake_video("visibility_test")
     _, body = multipart_upload(name, content)
-    job_id = body["job_id"]
-    code, data = get(f"/videos/{job_id}/status")
+    task_id = body["task_id"]
+    code, data = get(f"/videos/{task_id}/status")
     assert code == 200, f"Status returned {code}"
     assert data["status"] in ("pending", "processing", "done")
-    assert data["job_id"] == job_id
+    assert data["job_id"] == task_id
 
 
 @register("Job reaches 'done' status within 15s")
@@ -185,8 +188,7 @@ def test_404():
 
 @register("GET /videos returns a non-empty list")
 def test_list_endpoint():
-    name, content = fake_video("list_test")
-    multipart_upload(name, content)
+    upload_and_wait("list_test")  # ensure at least one completed job exists
     code, body = get("/videos")
     assert code == 200
     assert isinstance(body, list), f"Expected list, got {type(body)}"
@@ -220,10 +222,10 @@ def test_cors():
 def test_verdict_coverage():
     seen = set()
     for i in range(12):
-        name = f"coverage_{i}"
-        n, c = fake_video(name)
+        n, c = fake_video(f"coverage_{i}")
         _, body = multipart_upload(n, c)
-        result = wait_for_done(body["job_id"])
+        task_id = body["task_id"]
+        result = wait_for_done(task_id)
         seen.add(result["overall_status"])
         if seen == {"approved", "flagged", "blocked"}:
             break

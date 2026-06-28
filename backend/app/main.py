@@ -25,19 +25,21 @@ def health() -> dict:
 
 @app.post("/videos")
 async def upload_video(file: UploadFile) -> dict:
-    job_id = str(uuid.uuid4())
-    object_name = f"{job_id}.mp4"
+    task_id = str(uuid.uuid4())
+    object_name = f"{task_id}.mp4"
 
+    # Write upload to a temp file first, then persist to UPLOAD_DIR
     with tempfile.TemporaryDirectory() as tmp_dir:
-        local_path = os.path.join(tmp_dir, object_name)
-        with open(local_path, "wb") as f:
+        tmp_path = os.path.join(tmp_dir, object_name)
+        with open(tmp_path, "wb") as f:
             f.write(await file.read())
-        storage.upload_video(object_name, local_path)
+        file_path = storage.save_video(object_name, tmp_path)
 
-    db.create_job(job_id, file.filename or object_name)
-    process_video.delay(job_id)
+    db.create_job(task_id, file.filename or object_name, file_path)
+    process_video.delay(task_id)
 
-    return {"job_id": job_id}
+    # Flow-graph response: instant acknowledgment with tracking ID
+    return {"status": "processing", "task_id": task_id}
 
 
 @app.get("/videos")
@@ -45,6 +47,8 @@ def list_videos(limit: int = 50) -> list:
     jobs = db.list_jobs(limit)
     for j in jobs:
         j["job_id"] = j.pop("_id")
+        if "pillar_results" in j:
+            j["pillars"] = j.pop("pillar_results")
     return jobs
 
 
@@ -55,4 +59,6 @@ def get_status(job_id: str) -> dict:
         raise HTTPException(status_code=404, detail="job not found")
 
     job["job_id"] = job.pop("_id")
+    if "pillar_results" in job:
+        job["pillars"] = job.pop("pillar_results")
     return job

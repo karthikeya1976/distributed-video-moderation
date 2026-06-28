@@ -36,3 +36,14 @@ directly on Windows via a Python venv (`backend/venv`). Ports: API on 8088
 - [x] README.md with run instructions + interview cheat sheet
 - [x] Final docs pass (architecture.md, changelog.md updated)
 - [ ] Worker scaling demo (run manually: start 3 worker terminals, upload 5+ videos)
+
+## Milestone 4: v2 Architecture Upgrade (2026-06-28)
+- [x] PostgreSQL replaces MongoDB (db.py rewritten, docker-compose updated)
+- [x] Temp disk replaces MinIO (storage.py rewritten, UPLOAD_DIR config)
+- [x] decision_engine.py replaces aggregator.py (rename only, no logic change)
+- [x] POST /videos returns {status, task_id} (flow-graph response shape)
+- [x] tasks.py updated: temp disk read, decision_engine import, cleanup_video
+- [x] requirements.txt updated: pymongo+minio removed, psycopg2-binary added
+- [x] frontend/lib/api.ts: uploadVideo return type updated to {task_id, status}
+- [x] e2e tests updated and passing (15/15) against new stack
+- [x] docs updated (changelog, architecture, project_status, CLAUDE.md)
