@@ -1,78 +1,87 @@
 # Architecture
 
-## System Diagram
+## System Diagram (v2 — Milestone 4)
 
 ```
-[Next.js Frontend] --(upload)--> [FastAPI Backend] --> [MinIO (S3-compatible, local)]
-                                        |
-                                        v
-                              [Redis Queue] --(Celery tasks)--> [Worker(s)]
-                                                                     |
-                                              +----------------------+----------------------+
-                                              v                      v                      v
-                                    [Mock Adult Content]   [Mock AI/Deepfake]      [Mock Copyright/Pex]
-                                              |                      |                      |
-                                              +----------------------+----------------------+
-                                                                     v
-                                                          [Aggregator: combine scores
-                                                           -> approved/flagged/blocked]
-                                                                     v
-                                                          [MongoDB: store job + result]
-                                                                     v
-                                              [FastAPI status endpoint] --> [Next.js dashboard polls/displays]
+[ Next.js Frontend ]
+        │ HTTP POST (video file)
+        ▼
+[ FastAPI Gateway ]
+  ├── Generate UUID task_id
+  ├── Save video to UPLOAD_DIR/{task_id}.mp4  (temp local disk)
+  ├── Push task_id to Redis Queue via Celery
+  └── Return {"status": "processing", "task_id": "..."}  (instant ack)
+        │
+        │ Redis Queue pull
+        ▼
+[ Celery Worker ]
+  ├── [Mock Moderation Pillars — placeholder for real Moderation Worker]
+  │     ├── adult_content.check(task_id)
+  │     ├── ai_deepfake.check(task_id)
+  │     └── copyright_match.check(task_id)
+  │
+  └── [ Decision Engine (decision_engine.py) ]
+        └── Compiles scores → approved / flagged / blocked
+        │
+        │ SQL write
+        ▼
+[ PostgreSQL Database ]
+  └── videos table: id, filename, file_path, status, overall_status,
+                    pillar_results (JSONB), reasons (JSONB),
+                    size_bytes, created_at, updated_at
+        │
+        ▼
+[ FastAPI status endpoint ] ──► [ Next.js dashboard polls / displays ]
 ```
 
 ## Components
 
-### FastAPI Backend (`backend/app/main.py`)
+### FastAPI Gateway (`backend/app/main.py`)
 - `GET /health` — liveness check
-- `POST /videos` — accepts an uploaded video file, generates a `job_id`
-  (UUID), uploads the file to MinIO (`storage.py`), creates a job document in
-  MongoDB (`db.py`) with `status: "pending"`, and enqueues `process_video`
-  via Celery
-- `GET /videos/{job_id}/status` — returns the current job document (status,
+- `POST /videos` — accepts an uploaded video file, generates a `task_id`
+  (UUID), saves the file to `UPLOAD_DIR` (`storage.py`), creates a row in
+  PostgreSQL (`db.py`) with `status: "pending"`, enqueues `process_video`
+  via Celery, and returns `{"status": "processing", "task_id": "<uuid>"}`
+  immediately (non-blocking)
+- `GET /videos/{job_id}/status` — returns the current job row (status,
   per-pillar results, overall verdict, reasons)
-- `GET /videos` — paginated list of jobs (Milestone 3, for the dashboard)
+- `GET /videos` — paginated list of jobs (newest first)
 
-### Storage — MinIO (`backend/app/storage.py`)
-- S3-compatible object storage running locally via Docker
-- Stands in for Cloudflare R2 / AWS S3 from the original spec
-- Bucket: `videos`; objects are named `{job_id}.mp4`
+### Storage — Temp Local Disk (`backend/app/storage.py`)
+- Uploaded videos are saved to `UPLOAD_DIR` (default: `C:/tmp/video_uploads/`)
+  using `os`/`shutil` — no external service required
+- `save_video(object_name, src_path)` — persists file, returns dest path
+- `get_video_path(object_name)` — returns the path (no download needed)
+- `cleanup_video(object_name)` — deletes temp file after processing
 
-### Database — MongoDB (`backend/app/db.py`)
-- Stores one document per job in the `jobs` collection
-- Stands in for the "application data" store (MongoDB Atlas/Supabase in the
-  original spec)
-- Job document shape (after processing):
-  ```json
-  {
-    "_id": "<job_id>",
-    "filename": "...",
-    "status": "pending | processing | done",
-    "size_bytes": 12345,
-    "overall_status": "approved | flagged | blocked",
-    "reasons": ["adult_content: score 0.93 >= 0.8 (blocked threshold)"],
-    "pillars": [
-      {"pillar": "adult_content", "score": 0.93, "flags": [...]},
-      {"pillar": "ai_deepfake", "score": 0.41, "flags": [...]},
-      {"pillar": "copyright_match", "score": 0.58, "flags": [...]}
-    ],
-    "created_at": "...",
-    "updated_at": "..."
-  }
+### Database — PostgreSQL (`backend/app/db.py`)
+- `videos` table stores one row per job
+- `psycopg2-binary` driver; table created automatically on startup
+- Row schema:
   ```
+  id             TEXT PRIMARY KEY
+  filename       TEXT
+  file_path      TEXT
+  status         TEXT  (pending | processing | done)
+  overall_status TEXT  (approved | flagged | blocked)
+  pillar_results JSONB
+  reasons        JSONB
+  size_bytes     INTEGER
+  created_at     TIMESTAMPTZ
+  updated_at     TIMESTAMPTZ
+  ```
+- API response maps `pillar_results` → `pillars` for frontend compatibility
 
 ### Queue & Workers — Redis + Celery (`backend/app/tasks.py`)
 - Redis acts as both the Celery broker and result backend
-- Stands in for BullMQ/Redis or Celery/RabbitMQ from the original spec
-- `process_video(job_id)` Celery task:
+- `process_video(task_id)` Celery task:
   1. Sets status to `processing`
-  2. Downloads the video from MinIO
+  2. Reads file from local disk via `storage.get_video_path()`
   3. Runs all three pillar checks concurrently (`asyncio.gather`)
-  4. Aggregates results into an overall verdict
-  5. Writes final results to the job document, sets status to `done`
-- Scaling: running multiple worker containers/processes lets multiple jobs
-  process in parallel (demonstrated in Milestone 3)
+  4. Passes results to Decision Engine
+  5. Writes final results to PostgreSQL, sets status to `done`
+  6. Calls `storage.cleanup_video()` to remove the temp file
+- Scaling: multiple worker processes handle concurrent jobs
 
 ### Moderation Pillars (`backend/app/pillars/`)
 Each pillar module exposes:
@@ -83,20 +92,21 @@ async def check(job_id: str) -> dict
 - `adult_content.py` — mock for Sightengine / AWS Rekognition Video
 - `ai_deepfake.py` — mock for Sightengine GenAI / Hive AI
 - `copyright_match.py` — mock for Pex / ACRCloud
-- `common.py` — shared helper (`score_from_seed`) that derives a
-  deterministic pseudo-random score from a seed string, so mock results are
-  reproducible per video without a real ML model
+- `common.py` — `score_from_seed()` derives a deterministic pseudo-random
+  score from a seed string so mock results are reproducible per video
 
-This common interface is the key design decision that makes pillars
-swappable: replacing a mock with a real API call means editing one file,
-not the orchestration logic in `tasks.py`.
+Pillars are placeholders for the real Moderation Worker stages (FFmpeg
+pre-processing, vision/OCR/audio checks). The common interface makes each
+one swappable: replacing a mock with a real API client means editing one
+file, not the orchestration logic.
 
-### Aggregator (`backend/app/aggregator.py`)
-- Reads all three pillar results
-- Applies thresholds from `docs/moderation_policies.md`
+### Decision Engine (`backend/app/decision_engine.py`)
+- Standalone module (renamed from `aggregator.py` in Milestone 4)
+- Reads all three pillar results; applies thresholds from
+  `docs/moderation_policies.md`
 - Returns `{"overall_status": "approved|flagged|blocked", "reasons": [...]}`
-- Rule order: any "blocked" pillar -> `blocked`; else any "flagged" pillar ->
-  `flagged`; else `approved`
+- Rule: any blocked-threshold pillar → `blocked`; else any
+  flagged-threshold pillar → `flagged`; else `approved`
 
 ### Frontend — Next.js Dashboard (`frontend/`)
 - **Framework**: Next.js 16 (App Router), TypeScript, Tailwind CSS
@@ -119,13 +129,14 @@ not the orchestration logic in `tasks.py`.
 Due to a Docker network limitation on this machine (see `CLAUDE.md` Area 4),
 the topology differs slightly from a fully containerized deployment:
 
-- **Dockerized** (via `docker-compose.yml`): Redis (host port 6380), MinIO
-  (9000/9001), MongoDB (host port 27018, container `video-mod-mongo`)
+- **Dockerized** (via `docker-compose.yml`): Redis (host port 6380),
+  PostgreSQL (host port 5433)
 - **Run locally** (via `backend/venv`): FastAPI app (port 8088), Celery
   worker
 - Both connect to the Dockerized infra via `localhost` + mapped ports
   (see `backend/app/config.py`)
+- Uploaded files are stored on the Windows filesystem at `C:/tmp/video_uploads/`
 
 In a fully containerized deployment, the API/worker would run as their own
-services in `docker-compose.yml`, connecting to `redis`/`minio`/`mongo` via
-Docker service names (a `backend/Dockerfile` already exists for this).
+services in `docker-compose.yml`, connecting to `redis`/`postgres` via
+Docker service names, and `UPLOAD_DIR` would be a shared Docker volume.

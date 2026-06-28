@@ -24,7 +24,9 @@ export type Job = {
   updated_at: string;
 };
 
-export async function uploadVideo(file: File): Promise<{ job_id: string }> {
+export async function uploadVideo(
+  file: File
+): Promise<{ task_id: string; status: string }> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API}/videos`, { method: "POST", body: form });

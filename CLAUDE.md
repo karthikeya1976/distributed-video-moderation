@@ -1,8 +1,8 @@
 # Distributed Video Moderation Platform
 
 A locally-runnable, mocked version of a distributed video moderation
-pipeline: FastAPI + Celery + Redis + MinIO + MongoDB backend, Next.js
-dashboard frontend.
+pipeline: FastAPI + Celery + Redis + PostgreSQL backend (temp disk storage),
+Next.js dashboard frontend.
 
 ## Area 1: Project Goals
 
@@ -23,32 +23,28 @@ dashboard frontend.
 ## Area 2: Architecture Overview
 
 ```
-[Next.js Frontend] --(upload)--> [FastAPI Backend] --> [MinIO (S3-compatible, local)]
-                                        |
-                                        v
-                              [Redis Queue] --(Celery tasks)--> [Worker(s)]
-                                                                     |
-                                              +----------------------+----------------------+
-                                              v                      v                      v
-                                    [Mock Adult Content]   [Mock AI/Deepfake]      [Mock Copyright/Pex]
-                                              |                      |                      |
-                                              +----------------------+----------------------+
-                                                                     v
-                                                          [Aggregator: combine scores
-                                                           -> approved/flagged/blocked]
-                                                                     v
-                                                          [MongoDB: store job + result]
-                                                                     v
-                                              [FastAPI status endpoint] --> [Next.js dashboard polls/displays]
+[Next.js Frontend]
+      │ HTTP POST (video file)
+      ▼
+[FastAPI Gateway] → save to UPLOAD_DIR (temp disk) → Redis Queue → Celery Worker
+                  ← instant ack: {"status":"processing","task_id":"..."}
+                                                              │
+                                         [Mock Pillars (Moderation Worker placeholder)]
+                                                              │
+                                                 [Decision Engine]
+                                                              │ SQL write
+                                                              ▼
+                                                   [PostgreSQL Database]
+                                                              │
+                                         [FastAPI status endpoint] → [Next.js dashboard]
 ```
 
-- **Backend** (`backend/app/`): FastAPI app (`main.py`), Celery tasks
-  (`tasks.py`), storage helpers (`storage.py` for MinIO), DB helpers
-  (`db.py` for MongoDB job documents), config (`config.py`), pillar modules
-  (`pillars/`), and the verdict aggregator (`aggregator.py`).
-- **Frontend** (`frontend/`, Milestone 3): Next.js + Tailwind + shadcn/ui
-  dashboard for uploading videos and viewing moderation results.
-- **Infra**: `docker-compose.yml` runs Redis, MinIO, and MongoDB.
+- **Backend** (`backend/app/`): FastAPI gateway (`main.py`), Celery tasks
+  (`tasks.py`), temp disk storage helpers (`storage.py`), DB helpers
+  (`db.py` for PostgreSQL), config (`config.py`), pillar modules
+  (`pillars/`), and the Decision Engine (`decision_engine.py`).
+- **Frontend** (`frontend/`): Next.js + Tailwind + shadcn/ui dashboard.
+- **Infra**: `docker-compose.yml` runs Redis and PostgreSQL only.
 - Full design rationale and data flow: `docs/architecture.md`.
 - Detailed scoring thresholds and aggregation rules:
   `docs/moderation_policies.md`.
@@ -77,11 +73,11 @@ dashboard frontend.
 - **No paid APIs / cloud accounts.** All three moderation pillars
   (adult content, AI/deepfake, copyright) are mocked locally — see
   `docs/moderation_policies.md` for thresholds.
-- **Local-only infra**: MinIO stands in for S3/R2, local MongoDB (via
-  Docker) stands in for MongoDB Atlas/Supabase.
+- **Local-only infra**: PostgreSQL (via Docker) stores all job data.
+  Uploaded files are written to `C:/tmp/video_uploads/` (temp local disk).
 - **Docker network limitation**: this machine's Docker cannot reach
   pypi.org during image builds (SSL interception, likely VPN/AV). Therefore:
-  - Redis, MinIO, MongoDB run via `docker compose` (prebuilt images, no pip
+  - Redis and PostgreSQL run via `docker compose` (prebuilt images, no pip
     install needed).
   - The FastAPI app and Celery worker run directly on Windows via a local
     Python venv (`backend/venv`).
@@ -90,10 +86,8 @@ dashboard frontend.
 - **Port assignments** (chosen to avoid conflicts with other running
   containers/services on this machine):
   - FastAPI API: **8088** (8080 was already in use)
-  - Redis: host **6380** -> container 6379
-  - MongoDB: host **27018** -> container 27017 (container name
-    `video-mod-mongo`, distinct from any pre-existing `mongo:6` container)
-  - MinIO: **9000** (API), **9001** (console)
+  - Redis: host **6380** → container 6379
+  - PostgreSQL: host **5433** → container 5432
 
 ## Area 5: Repository Etiquette
 

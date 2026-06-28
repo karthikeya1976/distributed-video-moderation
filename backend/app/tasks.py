@@ -1,11 +1,10 @@
 import asyncio
 import os
-import tempfile
 
 from celery import Celery
 
 from app import config, db, storage
-from app.aggregator import aggregate
+from app.decision_engine import aggregate
 from app.pillars import adult_content, ai_deepfake, copyright_match
 
 celery_app = Celery(
@@ -32,12 +31,15 @@ def process_video(job_id: str) -> None:
     db.update_job(job_id, {"status": "processing"})
 
     object_name = f"{job_id}.mp4"
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        local_path = os.path.join(tmp_dir, object_name)
-        storage.download_video(object_name, local_path)
-        size_bytes = os.path.getsize(local_path)
 
+    # File is already on local disk — no download needed
+    file_path = storage.get_video_path(object_name)
+    size_bytes = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+
+    # Placeholder for Moderation Worker stages (mock pillars run concurrently)
     pillar_results = asyncio.run(_run_pillars(job_id))
+
+    # Decision Engine: compile pillar scores → overall verdict
     verdict = aggregate(pillar_results)
 
     db.update_job(
@@ -47,6 +49,9 @@ def process_video(job_id: str) -> None:
             "size_bytes": size_bytes,
             "overall_status": verdict["overall_status"],
             "reasons": verdict["reasons"],
-            "pillars": pillar_results,
+            "pillar_results": pillar_results,
         },
     )
+
+    # Stage C analog: remove temp file after processing is complete
+    storage.cleanup_video(object_name)
