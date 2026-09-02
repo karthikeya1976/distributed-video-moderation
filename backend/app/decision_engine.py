@@ -14,6 +14,11 @@ FLAG_THRESHOLDS = {
     "ai_deepfake": 0.7,
 }
 
+# Pillars where a LOW score triggers a block (relevance checks, not harm checks)
+BLOCK_BELOW_THRESHOLDS = {
+    "filmmaking_relevance": 0.3,
+}
+
 
 def aggregate(pillar_results: list[dict]) -> dict:
     blocked_reasons = []
@@ -27,6 +32,14 @@ def aggregate(pillar_results: list[dict]) -> dict:
         if block_threshold is not None and score >= block_threshold:
             blocked_reasons.append(
                 f"{pillar}: score {score} >= {block_threshold} (blocked threshold)"
+            )
+            continue
+
+        # Relevance pillars: block when score is too LOW
+        block_below = BLOCK_BELOW_THRESHOLDS.get(pillar)
+        if block_below is not None and score < block_below:
+            blocked_reasons.append(
+                f"{pillar}: score {score} < {block_below} (not filmmaking content)"
             )
             continue
 

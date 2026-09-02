@@ -1,28 +1,39 @@
-import os
-import shutil
+"""S3-backed video storage.
+
+Exposes three functions used by main.py and tasks.py:
+  save_video    — upload a local temp file to S3, return the S3 URI
+  get_video_path — return the S3 URI for a given object name
+  cleanup_video  — delete the S3 object after processing is complete
+
+The boto3 client is created once at module load time using credentials
+from config.py (which reads them from .env).
+"""
+
+import boto3
 
 from app import config
 
+_s3 = boto3.client(
+    "s3",
+    region_name=config.AWS_S3_REGION,
+    aws_access_key_id=config.AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
+)
 
-def _ensure_upload_dir() -> None:
-    os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+_BUCKET = config.AWS_S3_BUCKET
 
 
 def save_video(object_name: str, src_path: str) -> str:
-    """Copy uploaded file into UPLOAD_DIR. Returns the destination path."""
-    _ensure_upload_dir()
-    dest = os.path.join(config.UPLOAD_DIR, object_name)
-    shutil.copy2(src_path, dest)
-    return dest
+    """Upload src_path to S3. Returns the S3 URI s3://<bucket>/<object_name>."""
+    _s3.upload_file(src_path, _BUCKET, object_name)
+    return f"s3://{_BUCKET}/{object_name}"
 
 
 def get_video_path(object_name: str) -> str:
-    """Return the full path of a stored video (no download needed — already on disk)."""
-    return os.path.join(config.UPLOAD_DIR, object_name)
+    """Return the S3 URI for object_name (used by tasks.py to identify the file)."""
+    return f"s3://{_BUCKET}/{object_name}"
 
 
 def cleanup_video(object_name: str) -> None:
-    """Delete the temp file after processing is complete (mirrors Stage C cleanup)."""
-    path = os.path.join(config.UPLOAD_DIR, object_name)
-    if os.path.exists(path):
-        os.remove(path)
+    """Delete the S3 object after processing is complete."""
+    _s3.delete_object(Bucket=_BUCKET, Key=object_name)

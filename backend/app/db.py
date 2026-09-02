@@ -17,10 +17,24 @@ CREATE TABLE IF NOT EXISTS videos (
     pillar_results JSONB,
     reasons        JSONB,
     size_bytes     INTEGER,
+    user_id        UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 """
+
+_CREATE_USERS_TABLE = """
+CREATE TABLE IF NOT EXISTS users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name          TEXT NOT NULL,
+    email         TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    account_type  TEXT NOT NULL DEFAULT 'viewer',
+    department    TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
 
 
 def _connect():
@@ -33,20 +47,19 @@ def _ensure_schema() -> None:
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(_CREATE_TABLE)
+            cur.execute(_CREATE_USERS_TABLE)
 
 
-_ensure_schema()
 
-
-def create_job(job_id: str, filename: str, file_path: Optional[str] = None) -> None:
+def create_job(job_id: str, filename: str, file_path: Optional[str] = None, user_id: Optional[str] = None) -> None:
     now = datetime.now(timezone.utc)
     sql = """
-        INSERT INTO videos (id, filename, file_path, status, created_at, updated_at)
-        VALUES (%s, %s, %s, 'pending', %s, %s)
+        INSERT INTO videos (id, filename, file_path, status, user_id, created_at, updated_at)
+        VALUES (%s, %s, %s, 'pending', %s, %s, %s)
     """
     with _connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (job_id, filename, file_path, now, now))
+            cur.execute(sql, (job_id, filename, file_path, user_id, now, now))
 
 
 def update_job(job_id: str, fields: dict[str, Any]) -> None:
@@ -97,3 +110,61 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
         d["_id"] = d.pop("id")
         result.append(d)
     return result
+
+
+def get_feed(limit: int = 50) -> list[dict[str, Any]]:
+    """Return approved videos only — the public viewer feed."""
+    sql = "SELECT * FROM videos WHERE overall_status = 'approved' ORDER BY created_at DESC LIMIT %s"
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (limit,))
+            rows = cur.fetchall()
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["_id"] = d.pop("id")
+        result.append(d)
+    return result
+
+
+def create_user(name: str, email: str, password_hash: str) -> dict:
+    sql = """
+        INSERT INTO users (name, email, password_hash)
+        VALUES (%s, %s, %s)
+        RETURNING id, name, email, account_type, department, created_at
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (name, email, password_hash))
+            return dict(cur.fetchone())
+
+
+def get_user_by_id(user_id: str) -> Optional[dict]:
+    sql = "SELECT * FROM users WHERE id = %s"
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (user_id,))
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def get_user_by_email(email: str) -> Optional[dict]:
+    sql = "SELECT * FROM users WHERE email = %s"
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (email,))
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def upgrade_to_creator(user_id: str, department: str) -> dict:
+    sql = """
+        UPDATE users
+        SET account_type = 'creator', department = %s
+        WHERE id = %s
+        RETURNING id, name, email, account_type, department
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (department, user_id))
+            return dict(cur.fetchone())

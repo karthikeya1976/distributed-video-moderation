@@ -1,0 +1,103 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Clapperboard, Rss, Upload, User, LogOut } from "lucide-react";
+import { isLoggedIn, isCreator, clearAuth } from "@/lib/auth";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  creatorOnly?: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/feed",    label: "Feed",    icon: <Rss    size={20} /> },
+  { href: "/upload",  label: "Upload",  icon: <Upload size={20} />, creatorOnly: true },
+  { href: "/profile", label: "Profile", icon: <User   size={20} /> },
+];
+
+export default function NavBar() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [creator, setCreator]   = useState(false);
+
+  useEffect(() => {
+    setLoggedIn(isLoggedIn());
+    setCreator(isCreator());
+  }, [pathname]);
+
+  function handleLogout() {
+    clearAuth();
+    router.push("/");
+  }
+
+  if (!loggedIn) return null;
+
+  const visible = NAV_ITEMS.filter(i => !i.creatorOnly || creator);
+
+  return (
+    <aside
+      className="group fixed left-0 top-0 h-full z-40 flex flex-col overflow-hidden
+                 w-14 hover:w-52 transition-all duration-200 ease-in-out"
+      style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-4 py-5 min-h-[64px]"
+           style={{ borderBottom: "1px solid var(--border)" }}>
+        <Clapperboard size={22} className="shrink-0" style={{ color: "var(--accent)" }} />
+        <span className="font-bold text-base tracking-tight whitespace-nowrap
+                         opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              style={{ color: "var(--fg)" }}>
+          Redactor
+        </span>
+      </div>
+
+      {/* Links */}
+      <nav className="flex flex-col gap-1 px-2 pt-4 flex-1">
+        {visible.map(item => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors"
+              style={{
+                background: active ? "var(--accent)" : "transparent",
+                color: active ? "#fff" : "var(--fg-muted)",
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "var(--accent-bg)"; (e.currentTarget as HTMLElement).style.color = "var(--fg)"; }}
+              onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--fg-muted)"; } }}
+            >
+              <span className="shrink-0">{item.icon}</span>
+              <span className="text-sm font-medium whitespace-nowrap
+                               opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Logout */}
+      <div className="px-2 pb-4">
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-2 py-2.5 rounded-lg w-full transition-colors"
+          style={{ color: "var(--fg-muted)" }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--accent-bg)"; (e.currentTarget as HTMLElement).style.color = "var(--fg)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--fg-muted)"; }}
+        >
+          <LogOut size={20} className="shrink-0" />
+          <span className="text-sm font-medium whitespace-nowrap
+                           opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            Log out
+          </span>
+        </button>
+      </div>
+    </aside>
+  );
+}

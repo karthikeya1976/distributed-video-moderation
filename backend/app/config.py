@@ -16,5 +16,11 @@ if not POSTGRES_URL:
         "Copy .env.example to .env at the project root and fill in credentials."
     )
 
-# Local temp directory for uploaded video files
+# Local temp directory for uploaded video files (fallback when S3 not configured)
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "C:/tmp/video_uploads")
+
+# AWS S3 — required for Day 2+ storage
+AWS_ACCESS_KEY_ID     = os.environ.get("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+AWS_S3_BUCKET         = os.environ.get("AWS_S3_BUCKET", "")
+AWS_S3_REGION         = os.environ.get("AWS_S3_REGION", "us-east-2")
