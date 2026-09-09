@@ -13,12 +13,17 @@ import boto3
 
 from app import config
 
-_s3 = boto3.client(
-    "s3",
-    region_name=config.AWS_S3_REGION,
-    aws_access_key_id=config.AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=config.AWS_SECRET_ACCESS_KEY,
-)
+# If explicit credentials are provided (local dev), pass them directly.
+# On EC2 with an IAM instance profile, leave them out so boto3 uses the
+# role credentials automatically via the metadata service.
+_creds = {}
+if config.AWS_ACCESS_KEY_ID and config.AWS_SECRET_ACCESS_KEY:
+    _creds = {
+        "aws_access_key_id": config.AWS_ACCESS_KEY_ID,
+        "aws_secret_access_key": config.AWS_SECRET_ACCESS_KEY,
+    }
+
+_s3 = boto3.client("s3", region_name=config.AWS_S3_REGION, **_creds)
 
 _BUCKET = config.AWS_S3_BUCKET
 
