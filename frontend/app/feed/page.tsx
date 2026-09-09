@@ -13,6 +13,7 @@ export default function FeedPage() {
   const [jobs, setJobs]       = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
+  const [playing, setPlaying] = useState<string | null>(null);
 
   useEffect(() => {
     getFeed()
@@ -46,40 +47,82 @@ export default function FeedPage() {
           <p style={{ fontSize: "13px", marginTop: "6px" }}>Upload filmmaking content to get started.</p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {jobs.map(job => (
             <div
               key={job.job_id}
               style={{
                 background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: "12px", padding: "16px 20px",
-                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px",
+                borderRadius: "12px", overflow: "hidden",
               }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontWeight: 600, color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {job.filename}
-                </p>
-                <p style={{ fontSize: "12px", color: "var(--fg-muted)", marginTop: "2px" }}>
-                  {new Date(job.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-                </p>
-              </div>
-
-              {job.overall_status && (
-                <span style={{ fontSize: "12px", fontWeight: 500, padding: "4px 10px", borderRadius: "999px", whiteSpace: "nowrap", ...(BADGE[job.overall_status] ?? {}) }}>
-                  {job.overall_status}
-                </span>
-              )}
-
-              {job.pillars && (
-                <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "var(--fg-muted)" }}>
-                  {job.pillars.map(p => (
-                    <span key={p.pillar}>
-                      {p.pillar.replace(/_/g, " ")}: <strong style={{ color: "var(--accent)" }}>{p.score}</strong>
-                    </span>
-                  ))}
+              {/* Video player — shown when a presigned URL is available */}
+              {playing === job.job_id && job.video_url ? (
+                <video
+                  src={job.video_url}
+                  controls
+                  autoPlay
+                  style={{ width: "100%", maxHeight: "360px", background: "#000", display: "block" }}
+                />
+              ) : job.video_url ? (
+                <div
+                  onClick={() => setPlaying(job.job_id)}
+                  style={{
+                    position: "relative", cursor: "pointer",
+                    background: "#000", height: "180px",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <div style={{
+                    width: "56px", height: "56px", borderRadius: "50%",
+                    background: "rgba(65,105,225,0.85)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {/* Play triangle */}
+                    <div style={{
+                      width: 0, height: 0,
+                      borderTop: "12px solid transparent",
+                      borderBottom: "12px solid transparent",
+                      borderLeft: "20px solid #fff",
+                      marginLeft: "4px",
+                    }} />
+                  </div>
+                  <p style={{
+                    position: "absolute", bottom: "10px", left: "14px",
+                    fontSize: "12px", color: "rgba(255,255,255,0.6)", margin: 0,
+                  }}>
+                    Click to play
+                  </p>
                 </div>
-              )}
+              ) : null}
+
+              {/* Metadata row */}
+              <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 600, color: "var(--fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {job.filename}
+                  </p>
+                  <p style={{ fontSize: "12px", color: "var(--fg-muted)", marginTop: "2px" }}>
+                    {new Date(job.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                  </p>
+                </div>
+
+                {job.overall_status && (
+                  <span style={{ fontSize: "12px", fontWeight: 500, padding: "4px 10px", borderRadius: "999px", whiteSpace: "nowrap", ...(BADGE[job.overall_status] ?? {}) }}>
+                    {job.overall_status}
+                  </span>
+                )}
+
+                {job.pillars && (
+                  <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "var(--fg-muted)" }}>
+                    {job.pillars.map(p => (
+                      <span key={p.pillar}>
+                        {p.pillar.replace(/_/g, " ")}: <strong style={{ color: "var(--accent)" }}>{p.score}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>

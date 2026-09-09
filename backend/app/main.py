@@ -126,6 +126,16 @@ def get_feed(limit: int = 50) -> list:
         j["job_id"] = j.pop("_id")
         if "pillar_results" in j:
             j["pillars"] = j.pop("pillar_results")
+        # Derive the S3 object key from the stored file_path (s3://bucket/key)
+        file_path = j.get("file_path", "")
+        if file_path.startswith("s3://"):
+            object_name = file_path.split("/", 3)[-1]
+            try:
+                j["video_url"] = storage.get_presigned_url(object_name)
+            except Exception:
+                j["video_url"] = None
+        else:
+            j["video_url"] = None
     return jobs
 
 

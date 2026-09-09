@@ -1,9 +1,10 @@
 """S3-backed video storage.
 
-Exposes three functions used by main.py and tasks.py:
-  save_video    — upload a local temp file to S3, return the S3 URI
-  get_video_path — return the S3 URI for a given object name
-  cleanup_video  — delete the S3 object after processing is complete
+Exposes four functions used by main.py and tasks.py:
+  save_video       — upload a local temp file to S3, return the S3 URI
+  get_video_path   — return the S3 URI for a given object name
+  get_presigned_url — generate a time-limited HTTPS URL for browser playback
+  cleanup_video    — delete the S3 object after processing is complete
 
 The boto3 client is created once at module load time using credentials
 from config.py (which reads them from .env).
@@ -37,6 +38,15 @@ def save_video(object_name: str, src_path: str) -> str:
 def get_video_path(object_name: str) -> str:
     """Return the S3 URI for object_name (used by tasks.py to identify the file)."""
     return f"s3://{_BUCKET}/{object_name}"
+
+
+def get_presigned_url(object_name: str, expires: int = 3600) -> str:
+    """Return a time-limited HTTPS URL for browser playback (default 1 hour)."""
+    return _s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": _BUCKET, "Key": object_name},
+        ExpiresIn=expires,
+    )
 
 
 def cleanup_video(object_name: str) -> None:
