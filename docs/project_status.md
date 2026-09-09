@@ -47,3 +47,29 @@ directly on Windows via a Python venv (`backend/venv`). Ports: API on 8088
 - [x] frontend/lib/api.ts: uploadVideo return type updated to {task_id, status}
 - [x] e2e tests updated and passing (15/15) against new stack
 - [x] docs updated (changelog, architecture, project_status, CLAUDE.md)
+
+## Redactor MVP (2026-09-08)
+- [x] JWT auth system: register, login, upgrade (viewer → creator)
+- [x] users table in PostgreSQL with account_type + department
+- [x] POST /videos requires Creator JWT; user_id stored on video rows
+- [x] GET /feed returns approved videos only (public)
+- [x] S3 storage via boto3 (replaces local disk)
+- [x] IAM instance profile support (no hardcoded keys on EC2)
+- [x] 4th pillar: filmmaking_relevance (inverse scoring, block below 0.3)
+- [x] BLOCK_BELOW_THRESHOLDS in decision_engine.py
+- [x] Dark-theme frontend redesign (selenium blue accent, #0a0a0f bg)
+- [x] Collapsed vertical sidebar with icon-only + hover-expand labels
+- [x] 4 pages: / (auth), /feed, /upload, /profile
+- [x] frontend/lib/auth.ts: localStorage JWT helpers
+- [x] NEXT_PUBLIC_API_URL env var for configurable API base
+
+## AWS Deployment (2026-09-09)
+- [x] CloudFormation stack: VPC, subnets, IGW, security groups
+- [x] RDS PostgreSQL 15.19 (db.t3.micro) — redactor-db
+- [x] ElastiCache Redis (cache.t3.micro) — redactor-redis
+- [x] EC2 t3.small (Amazon Linux 2023) — public IP 18.216.199.64
+- [x] IAM role: AmazonSSMManagedInstanceCore + S3 access
+- [x] Systemd services: redactor-api + redactor-celery (auto-restart, survive reboots)
+- [x] End-to-end verified on AWS: register → login → upload → S3 → Celery → RDS → result
+- [ ] CloudFormation UserData bootstrap fixed (venv path, root ownership) for automated redeploys
+- [ ] Frontend deployed to a public URL (currently local only, points at EC2 API)

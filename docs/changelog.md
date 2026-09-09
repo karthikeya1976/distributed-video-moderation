@@ -73,3 +73,91 @@ Changes:
   `{task_id, status}`.
 - `tests/e2e_test.py`: updated to assert `task_id` field in upload response;
   all 15 tests pass against the new stack.
+
+## 2026-09-08 — Redactor MVP: Auth, S3, 4th Pillar, Frontend Redesign
+
+### Auth system
+- Added JWT-based authentication (`python-jose`, `passlib[bcrypt]`).
+- New `users` table in PostgreSQL with `id`, `name`, `email`,
+  `password_hash`, `account_type` (viewer/creator), `department`,
+  `created_at`.
+- Endpoints: `POST /auth/register`, `POST /auth/login`,
+  `POST /auth/upgrade` (viewer → creator).
+- `POST /videos` now requires a valid Creator JWT; `user_id` stored on
+  each video row.
+- `GET /feed` returns only approved videos (public, no auth required).
+
+### S3 storage
+- `storage.py` rewritten with `boto3`: uploads go to S3 bucket
+  `amzn-s3-bucket-dvm` (us-east-2) instead of local disk.
+- `config.py` reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+  `AWS_S3_BUCKET`, `AWS_S3_REGION` from `.env`.
+- On EC2 with an IAM instance profile, explicit credentials are omitted
+  so boto3 uses the role automatically (fixed `AWS_ERROR_INVALID_ARGUMENT`
+  crash from passing empty strings).
+- `docker-compose.yml` updated: PostgreSQL mapped to host port 5434
+  (5433 was already taken by native Windows Postgres).
+
+### 4th moderation pillar: filmmaking_relevance
+- `backend/app/pillars/filmmaking_relevance.py`: scores 0-1; low score
+  (< 0.3) means content is NOT filmmaking-related and should be blocked.
+- `decision_engine.py` gains `BLOCK_BELOW_THRESHOLDS` dict for inverse
+  scoring pillars (score below threshold → blocked, not above).
+
+### Frontend redesign
+- Replaced the generic dashboard with a filmmaker-focused dark-theme UI.
+- Dark palette: `--bg #0a0a0f`, `--surface #13131a`, `--accent #4169e1`
+  (selenium blue), all via CSS custom properties for easy theming.
+- Collapsed vertical sidebar (icons only, labels on hover) using Tailwind
+  `group`/`transition`; hides itself when not logged in.
+- 4 pages: `/` (auth — login/register), `/feed` (approved videos),
+  `/upload` (creator-only drop zone + live poll), `/profile` (user card,
+  upgrade form, logout).
+- `frontend/lib/auth.ts`: localStorage JWT helpers (`getToken`, `setAuth`,
+  `clearAuth`, `isCreator`, etc.).
+- `frontend/lib/api.ts`: typed API client extended with `register`,
+  `login`, `upgradeToCreator`, `getFeed`.
+- `NEXT_PUBLIC_API_URL` env var added; falls back to `localhost:8088` for
+  local dev.
+
+## 2026-09-09 — AWS Deployment (EC2 + RDS + ElastiCache + S3)
+
+### Infrastructure
+- `infra/cloudformation.yml`: full AWS stack — VPC, public + private
+  subnets, Internet Gateway, route table, security groups (EC2/RDS/Redis),
+  RDS PostgreSQL 15.19 (db.t3.micro), ElastiCache Redis (cache.t3.micro),
+  EC2 t3.small (Amazon Linux 2023, `ami-0619724297c6fa28d`, us-east-2),
+  IAM role with `AmazonSSMManagedInstanceCore` + S3 access policy,
+  EC2 instance profile.
+- EC2 public IP: `18.216.199.64`; API accessible at
+  `http://18.216.199.64:8088`.
+- RDS endpoint: `redactor-db.c1qooqeoynjz.us-east-2.rds.amazonaws.com`
+- ElastiCache endpoint: `redactor-redis.5v2cub.0001.use2.cache.amazonaws.com`
+- Security group `EC2SG` allows inbound TCP 8088 from `0.0.0.0/0`.
+
+### Deployment process (manual, first deploy)
+- EC2 bootstrapped via Session Manager (SSM) — no SSH keys needed.
+- Repo cloned with `sudo git clone` (root ownership); `git pull` requires
+  `sudo git -C /app pull` due to ownership mismatch.
+- Python packages installed to `ssm-user`'s local site-packages
+  (`/home/ssm-user/.local/lib/python3.9/`) — no venv possible in `/app`
+  (root-owned).
+- Systemd services `redactor-api.service` and `redactor-celery.service`
+  created manually (UserData bootstrap runs as root at first boot but
+  packages weren't available then); services run as `ssm-user`.
+- `ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id UUID ...` run
+  manually to migrate existing RDS table.
+
+### Deviations / workarounds
+- University network blocks non-standard ports outbound; home WiFi required
+  for testing on port 8088.
+- EC2 CloudFormation UserData bootstrap installs packages but the venv
+  path (`/app/backend/.venv`) is wrong since `/app` is root-owned.
+  Services point to `/usr/bin/python3` (system Python) instead.
+- `frontend/.env.local` sets `NEXT_PUBLIC_API_URL=http://18.216.199.64:8088`
+  for local frontend dev against the live AWS API.
+
+### End-to-end verified on AWS
+- Register → Login → Upgrade to Creator → Upload video → S3 storage →
+  Celery moderation (4 pillars) → Decision engine → RDS result →
+  Status poll returns full pillar breakdown with verdict.
