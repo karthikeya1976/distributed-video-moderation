@@ -17,9 +17,8 @@ Parameters:
 
   DBPassword:
     Type: String
-    Default: redactor123
     NoEcho: true
-    Description: RDS postgres password
+    Description: RDS postgres password (pass via --parameter-overrides, never hardcode)
 
   S3Bucket:
     Type: String
@@ -28,9 +27,8 @@ Parameters:
 
   JWTSecret:
     Type: String
-    Default: redactor-prod-secret-change-me
     NoEcho: true
-    Description: JWT signing secret
+    Description: JWT signing secret (pass via --parameter-overrides, never hardcode)
 
 # ── Mappings ──────────────────────────────────────────────────────────────
 Mappings:
