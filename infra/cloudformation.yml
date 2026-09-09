@@ -1,0 +1,329 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Redactor MVP infrastructure — VPC, EC2 (FastAPI + Celery),
+  RDS PostgreSQL, ElastiCache Redis, Security Groups.
+
+# ── Parameters ────────────────────────────────────────────────────────────
+Parameters:
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: redactor-v2
+    Description: EC2 SSH key pair name
+
+  MyIP:
+    Type: String
+    Default: 138.26.211.189/32
+    Description: Your IP for SSH access (CIDR)
+
+  DBPassword:
+    Type: String
+    Default: redactor123
+    NoEcho: true
+    Description: RDS postgres password
+
+  S3Bucket:
+    Type: String
+    Default: amzn-s3-bucket-dvm
+    Description: Existing S3 bucket for video uploads
+
+  JWTSecret:
+    Type: String
+    Default: redactor-prod-secret-change-me
+    NoEcho: true
+    Description: JWT signing secret
+
+# ── Mappings ──────────────────────────────────────────────────────────────
+Mappings:
+  RegionMap:
+    us-east-2:
+      AMI: ami-0619724297c6fa28d   # Amazon Linux 2023 (us-east-2, 2026-08-31)
+
+# ── Resources ─────────────────────────────────────────────────────────────
+Resources:
+
+  # ── VPC ─────────────────────────────────────────────────────────────────
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: redactor-vpc}]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{Key: Name, Value: redactor-igw}]
+
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public subnet (EC2 lives here)
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags: [{Key: Name, Value: redactor-public-1}]
+
+  # Two private subnets for RDS (requires multi-AZ subnet group)
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags: [{Key: Name, Value: redactor-private-1}]
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags: [{Key: Name, Value: redactor-private-2}]
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # ── Security Groups ──────────────────────────────────────────────────────
+
+  # EC2: SSH from your IP + HTTP 8088 from anywhere
+  EC2SG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Redactor EC2
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+        - IpProtocol: tcp
+          FromPort: 8088
+          ToPort: 8088
+          CidrIp: 0.0.0.0/0
+      Tags: [{Key: Name, Value: redactor-ec2-sg}]
+
+  # RDS: port 5432 only from EC2
+  RDSSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Redactor RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SG
+      Tags: [{Key: Name, Value: redactor-rds-sg}]
+
+  # ElastiCache: port 6379 only from EC2
+  RedisSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Redactor Redis
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref EC2SG
+      Tags: [{Key: Name, Value: redactor-redis-sg}]
+
+  # ── RDS PostgreSQL ───────────────────────────────────────────────────────
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Redactor RDS subnets
+      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+      Tags: [{Key: Name, Value: redactor-db-subnet-group}]
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      DBInstanceIdentifier: redactor-db
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: "15.19"
+      MasterUsername: postgres
+      MasterUserPassword: !Ref DBPassword
+      DBName: video_moderation
+      AllocatedStorage: "20"
+      StorageType: gp2
+      MultiAZ: false
+      PubliclyAccessible: false
+      VPCSecurityGroups: [!GetAtt RDSSG.GroupId]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      BackupRetentionPeriod: 0
+      Tags: [{Key: Name, Value: redactor-db}]
+
+  # ── ElastiCache Redis ────────────────────────────────────────────────────
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Redactor Redis subnets
+      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+
+  RedisCluster:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      ClusterName: redactor-redis
+      Engine: redis
+      CacheNodeType: cache.t3.micro
+      NumCacheNodes: 1
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      VpcSecurityGroupIds: [!GetAtt RedisSG.GroupId]
+      Tags: [{Key: Name, Value: redactor-redis}]
+
+  # ── IAM Role for EC2 → S3 ───────────────────────────────────────────────
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: redactor-ec2-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+      # AmazonSSMManagedInstanceCore allows Session Manager (browser terminal, no SSH needed)
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket]
+                Resource:
+                  - !Sub arn:aws:s3:::${S3Bucket}
+                  - !Sub arn:aws:s3:::${S3Bucket}/*
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref EC2Role]
+
+  # ── EC2 Instance ─────────────────────────────────────────────────────────
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: [RDSInstance, RedisCluster]
+    Properties:
+      InstanceType: t3.small
+      KeyName: !Ref KeyPairName
+      ImageId: !FindInMap [RegionMap, !Ref AWS::Region, AMI]
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref EC2SG]
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      Tags: [{Key: Name, Value: redactor-api}]
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          exec > /var/log/redactor-bootstrap.log 2>&1
+
+          # Amazon Linux 2023 uses dnf
+          dnf update -y
+          dnf install -y python3-pip python3 git gcc postgresql15-devel
+
+          # Clone repo
+          git clone https://github.com/karthikeya1976/distributed-video-moderation.git /app
+          cd /app/backend
+
+          # Create venv and install deps
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" celery redis psycopg2-binary \
+                      "python-jose[cryptography]" "passlib[bcrypt]" boto3 \
+                      python-dotenv python-multipart "bcrypt==4.0.1"
+
+          # Write .env with injected endpoints
+          cat > /app/.env <<'ENVEOF'
+          POSTGRES_URL=postgresql://postgres:${DBPassword}@${RDSInstance.Endpoint.Address}:5432/video_moderation
+          REDIS_URL=redis://${RedisCluster.RedisEndpoint.Address}:6379/0
+          AWS_S3_BUCKET=${S3Bucket}
+          AWS_S3_REGION=${AWS::Region}
+          JWT_SECRET=${JWTSecret}
+          UPLOAD_DIR=/tmp/video_uploads
+          ENVEOF
+
+          mkdir -p /tmp/video_uploads
+
+          # Start FastAPI as a systemd service
+          cat > /etc/systemd/system/redactor-api.service <<'SVCEOF'
+          [Unit]
+          Description=Redactor FastAPI
+          After=network.target
+
+          [Service]
+          WorkingDirectory=/app/backend
+          ExecStart=/app/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8088
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          SVCEOF
+
+          # Start Celery as a systemd service
+          cat > /etc/systemd/system/redactor-celery.service <<'SVCEOF'
+          [Unit]
+          Description=Redactor Celery Worker
+          After=network.target
+
+          [Service]
+          WorkingDirectory=/app/backend
+          ExecStart=/app/backend/.venv/bin/celery -A app.tasks worker --loglevel=info --pool=solo
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          SVCEOF
+
+          systemctl daemon-reload
+          systemctl enable redactor-api redactor-celery
+          systemctl start redactor-api redactor-celery
+
+# ── Outputs ───────────────────────────────────────────────────────────────
+Outputs:
+  EC2PublicIP:
+    Description: EC2 public IP — your API base URL
+    Value: !GetAtt EC2Instance.PublicIp
+
+  APIBaseURL:
+    Description: FastAPI base URL
+    Value: !Sub http://${EC2Instance.PublicIp}:8088
+
+  RDSEndpoint:
+    Description: RDS PostgreSQL endpoint
+    Value: !GetAtt RDSInstance.Endpoint.Address
+
+  RedisEndpoint:
+    Description: ElastiCache Redis endpoint
+    Value: !GetAtt RedisCluster.RedisEndpoint.Address
