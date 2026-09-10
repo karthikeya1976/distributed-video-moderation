@@ -1,186 +1,90 @@
 # Changelog
 
 ## 2026-06-14
-- Project initialized: repo, docs scaffold, .gitignore, CLAUDE.md created.
+- Project initialized: repo, docs scaffold, `.gitignore`, `CLAUDE.md`.
 
 ## 2026-06-15
-- Milestone 1 complete: FastAPI app (`backend/app/main.py`) with `/health`,
-  `POST /videos`, `GET /videos/{job_id}/status`. MinIO storage helper
-  (`storage.py`), Mongo job helpers (`db.py`), Celery task `process_video`
-  (`tasks.py`) that downloads from MinIO and updates job status.
-  Infra (redis, minio, mongo) via docker-compose; API/worker run in a local
-  Python venv due to a Docker build network issue (see project_status.md).
-  Verified end-to-end with a test upload: pending -> processing -> received,
-  file confirmed in MinIO and job document confirmed in MongoDB.
-- Milestone 2 complete: added `docs/moderation_policies.md` with per-pillar
-  thresholds. Implemented mock pillars (`backend/app/pillars/`):
-  `adult_content.py`, `ai_deepfake.py`, `copyright_match.py` (each derives a
-  deterministic pseudo-random score from the job_id via `common.py`).
-  Added `aggregator.py` combining pillar scores into
-  approved/flagged/blocked with reasons. `tasks.py` now runs all three
-  pillars concurrently (asyncio.gather) and stores full results on the job
-  document. Verified with 5 test uploads producing all three outcomes
-  (approved, flagged, blocked) with correct reasons and flags.
-- Restructured `CLAUDE.md` into six areas (Project Goals, Architecture
-  Overview, Design Style Guide, Constraints & Policies, Repository
-  Etiquette, Documentation) and added a documentation update rule. Added
-  `docs/project_spec.md` (full product spec + roadmap from the original
-  briefing, with a mapping table showing how each spec item maps to this
-  build) and `docs/architecture.md` (expanded system design, component
-  breakdown, job document schema, local dev topology).
+- **Milestone 1**: FastAPI gateway (`/health`, `POST /videos`, `GET /videos/{id}/status`), MinIO storage, MongoDB job docs, Celery task `process_video`. Infra via docker-compose. Verified end-to-end: pending → processing → received.
+- **Milestone 2**: Three mock moderation pillars (`adult_content`, `ai_deepfake`, `copyright_match`) with deterministic pseudo-random scores via `common.py`. `aggregator.py` combines scores into approved/flagged/blocked. Pillars run concurrently via `asyncio.gather`.
 
 ## 2026-06-17
-- Milestone 3 complete: added CORS middleware and `GET /videos` list endpoint
-  to `backend/app/main.py`. Scaffolded Next.js 16 frontend (`frontend/`) with
-  App Router, TypeScript, Tailwind CSS. Built typed API client (`lib/api.ts`),
-  upload page with file picker + spinner (`/`), and moderation dashboard
-  (`/dashboard`) with live 3-second polling, per-job expandable detail rows
-  showing pillar score progress bars, flag timelines with timestamps, and
-  policy trigger reasons. Color-coded verdict badges (approved=green,
-  flagged=amber, blocked=red). Both pages serve 200 and compile without
-  errors. CORS verified with preflight OPTIONS returning correct
-  `access-control-allow-origin` header. Added `README.md` with run
-  instructions and an interview cheat sheet covering every component.
-  Scaling demo: run `venv\Scripts\python -m celery ... worker` in 3 terminals
-  simultaneously and upload 5+ videos to observe parallel processing.
+- **Milestone 3**: `GET /videos` list endpoint + CORS. Next.js 16 frontend: upload page (`/`), moderation dashboard (`/dashboard`) with 3-second polling, per-job expandable detail rows, pillar score bars, flag timelines, verdict badges.
 
-## 2026-06-28 — v2 Architecture Upgrade (Milestone 4)
-Upgraded infrastructure to match the target flow graph. Moderation Worker
-stages (FFmpeg pre-processing, sequential vision/OCR/audio checks, disk
-cleanup) are excluded per spec; mock pillars remain as placeholders.
+## 2026-06-28 — v2 Architecture Upgrade
+- **PostgreSQL** replaces MongoDB (`psycopg2-binary`; `videos` table with JSONB columns).
+- **Temp disk** replaces MinIO (`UPLOAD_DIR = C:/tmp/video_uploads/`).
+- `aggregator.py` → `decision_engine.py` (rename, no logic change).
+- `POST /videos` now returns `{status, task_id}` (instant ack).
+- `tasks.py` calls `storage.cleanup_video()` after processing.
+- E2E tests updated; all 15 pass against new stack.
 
-Changes:
-- **PostgreSQL replaces MongoDB**: `db.py` rewritten with `psycopg2-binary`;
-  `videos` table with JSONB columns for `pillar_results` and `reasons`.
-  `docker-compose.yml` now runs `postgres:15-alpine` on host port 5433 instead
-  of `mongo:6`.
-- **Temp disk replaces MinIO**: `storage.py` rewritten to use `os`/`shutil`
-  to persist uploads to `C:/tmp/video_uploads/` (configurable via `UPLOAD_DIR`
-  env var). MinIO service removed from `docker-compose.yml`.
-- **Decision Engine**: `aggregator.py` renamed to `decision_engine.py` to
-  match the flow-graph component name. Import updated in `tasks.py`. No logic
-  change.
-- **Gateway response shape**: `POST /videos` now returns
-  `{"status": "processing", "task_id": "<uuid>"}` instead of
-  `{"job_id": "<uuid>"}`, matching the flow graph's instant-acknowledgment
-  contract.
-- **Stage C cleanup**: `tasks.py` now calls `storage.cleanup_video()` after
-  processing completes to remove the temp file (mirrors the flow graph's
-  Stage C disk cleanup, without FFmpeg).
-- `requirements.txt`: `pymongo` and `minio` removed; `psycopg2-binary==2.9.10`
-  added.
-- `frontend/lib/api.ts`: `uploadVideo()` return type updated to
-  `{task_id, status}`.
-- `tests/e2e_test.py`: updated to assert `task_id` field in upload response;
-  all 15 tests pass against the new stack.
+## 2026-09-08 — Redactor MVP
+- **JWT auth**: `POST /auth/register`, `/auth/login`, `/auth/upgrade`. `python-jose` + `passlib[bcrypt]`. `users` table added to PostgreSQL.
+- **Creator-gated upload**: `POST /videos` requires Creator JWT; `user_id` stored on video rows.
+- **S3 storage**: `storage.py` rewritten with `boto3`; `amzn-s3-bucket-dvm` (us-east-2). IAM instance profile support on EC2.
+- **4th pillar** `filmmaking_relevance`: AWS Rekognition `DetectLabels`; inverse scoring — score < 0.3 → blocked. `BLOCK_BELOW_THRESHOLDS` added to `decision_engine.py`.
+- **Real moderation APIs**: Sightengine nudity-2.1 (adult content), Sightengine genai (deepfake), SHA-256 hash (duplicate detection), AWS Rekognition (filmmaking).
+- **Frontend redesign**: dark theme (`#0a0a0f` bg, `#4169e1` selenium blue), collapsible sidebar (icons → labels on hover), 4 pages: `/` auth, `/feed`, `/upload`, `/profile`.
 
-## 2026-09-08 — Redactor MVP: Auth, S3, 4th Pillar, Frontend Redesign
-
-### Auth system
-- Added JWT-based authentication (`python-jose`, `passlib[bcrypt]`).
-- New `users` table in PostgreSQL with `id`, `name`, `email`,
-  `password_hash`, `account_type` (viewer/creator), `department`,
-  `created_at`.
-- Endpoints: `POST /auth/register`, `POST /auth/login`,
-  `POST /auth/upgrade` (viewer → creator).
-- `POST /videos` now requires a valid Creator JWT; `user_id` stored on
-  each video row.
-- `GET /feed` returns only approved videos (public, no auth required).
-
-### S3 storage
-- `storage.py` rewritten with `boto3`: uploads go to S3 bucket
-  `amzn-s3-bucket-dvm` (us-east-2) instead of local disk.
-- `config.py` reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  `AWS_S3_BUCKET`, `AWS_S3_REGION` from `.env`.
-- On EC2 with an IAM instance profile, explicit credentials are omitted
-  so boto3 uses the role automatically (fixed `AWS_ERROR_INVALID_ARGUMENT`
-  crash from passing empty strings).
-- `docker-compose.yml` updated: PostgreSQL mapped to host port 5434
-  (5433 was already taken by native Windows Postgres).
-
-### 4th moderation pillar: filmmaking_relevance
-- `backend/app/pillars/filmmaking_relevance.py`: scores 0-1; low score
-  (< 0.3) means content is NOT filmmaking-related and should be blocked.
-- `decision_engine.py` gains `BLOCK_BELOW_THRESHOLDS` dict for inverse
-  scoring pillars (score below threshold → blocked, not above).
-
-### Frontend redesign
-- Replaced the generic dashboard with a filmmaker-focused dark-theme UI.
-- Dark palette: `--bg #0a0a0f`, `--surface #13131a`, `--accent #4169e1`
-  (selenium blue), all via CSS custom properties for easy theming.
-- Collapsed vertical sidebar (icons only, labels on hover) using Tailwind
-  `group`/`transition`; hides itself when not logged in.
-- 4 pages: `/` (auth — login/register), `/feed` (approved videos),
-  `/upload` (creator-only drop zone + live poll), `/profile` (user card,
-  upgrade form, logout).
-- `frontend/lib/auth.ts`: localStorage JWT helpers (`getToken`, `setAuth`,
-  `clearAuth`, `isCreator`, etc.).
-- `frontend/lib/api.ts`: typed API client extended with `register`,
-  `login`, `upgradeToCreator`, `getFeed`.
-- `NEXT_PUBLIC_API_URL` env var added; falls back to `localhost:8088` for
-  local dev.
+## 2026-09-09 — AWS Deployment
+- **CloudFormation** `infra/cloudformation.yml`: VPC, subnets, IGW, security groups, RDS PostgreSQL 15 (db.t3.micro), ElastiCache Redis (cache.t3.micro), EC2 t3.small (Amazon Linux 2023), IAM role + instance profile.
+- **Nginx + Let's Encrypt** via DuckDNS: `https://redactor-api.duckdns.org` terminates TLS, proxies to `:8088`.
+- **Systemd services**: `redactor-api` and `redactor-celery` auto-restart and survive reboots.
+- **Vercel deploy**: frontend at `https://distributed-video-moderation.vercel.app`.
+- End-to-end verified on AWS: register → login → upgrade → upload → S3 → Celery → 4 pillars → RDS → presigned URL feed.
 
 ## 2026-09-10 — Editor Club Social Features
 
+### Smart feed
+- `GET /feed` now accepts optional `?token=<jwt>` and returns `{enrouted, recommended}` instead of a flat list.
+- Two SQL queries: (1) videos from followed creators, recency-ordered; (2) all others, ranked by `creator.credits DESC, created_at DESC`.
+- Frontend merges buckets with `SectionDivider` entries (`Following` / `Recommended`). `isDivider()` guards against `undefined` at Next.js build time (prerender crash fix).
+
+### Follow / Enroute system
+- `follows` table added: `(follower_id UUID, following_id UUID, created_at)` with composite PK.
+- `POST /creators/{id}/follow` and `DELETE /creators/{id}/follow` endpoints.
+- Enroute/Deroute pill in feed overlay, creator profile page, and search results. Optimistic update with revert on error.
+
+### Credits
+- `users.credits INTEGER DEFAULT 0` column added.
+- `POST /videos/{id}/credit` increments creator credits by 1.
+- Star button in feed shows live count; one credit per viewer per session.
+
+### Comments
+- `comments` table: `(id UUID, video_id TEXT, user_id UUID, body TEXT, created_at)`.
+- `GET /videos/{id}/comments` and `POST /videos/{id}/comments?token=<jwt>`.
+- `CommentDrawer` in feed fetches on open, posts with author attribution; author name + initials shown per comment.
+- `_ensure_schema()` fixed: `CREATE INDEX` split into a separate `execute()` call (psycopg2 only handles one statement per call).
+
+### Search
+- `GET /search?q=` ILIKE query across creator names/departments and video filenames.
+- Debounced 400ms via `useEffect` + `useRef` timer (replaces broken `useCallback(debounce())` pattern).
+- UX: animated 3-dot loading indicator, clear (×) button, error banner, no-results state with suggestions.
+
 ### Creator profile page
-- New route `/creators/[id]` with avatar, stat tiles (followers, videos,
-  credits), Enroute/Deroute button, and bio generated from department.
-- Creator names in the feed overlay and search results are now clickable
-  links navigating to the profile page.
+- `/creators/[id]` with avatar (initials), name, department chip, stat tiles (followers, videos, credits), Enroute/Deroute button, back button.
 
-### Persistent comments
-- `comments` table in PostgreSQL: `id UUID`, `video_id TEXT`,
-  `user_id UUID`, `body TEXT`, `created_at TIMESTAMPTZ`.
-- `GET /videos/{job_id}/comments` and `POST /videos/{job_id}/comments`
-  endpoints (token passed as query param so no CORS preflight on reads).
-- `CommentDrawer` in the feed now fetches real comments on open and posts
-  new ones; shows author initials + name from `users` JOIN.
-- `_ensure_schema()` updated to create the comments table on startup.
+### Upload format toggle
+- **Scene** (16:9 landscape) and **Shot** (9:16 portrait) selector above the drop zone.
+- Drop zone shape changes to match the selected format's aspect ratio.
+- Switching format clears the file picker. Submit button label reflects format.
 
-### NavBar + branding
-- Logout button removed from sidebar entirely — lives only on `/profile`.
-- Profile icon moved to the pinned bottom slot (where logout was).
-- Clapperboard icon replaced with "Editor Club" text / "EC" monogram
-  (collapsed state shows initials, hover shows full name).
+### Feed swipe navigation
+- `SwipeCard` component wraps the reel card: `onPointerDown`/`onPointerMove`/`onPointerUp` track drag delta.
+- Swipe up = next, swipe down = prev, tap = pause/play. Works with mouse and touch.
+- Removed arrow navigation buttons below the card; subtle ↑/↓ hints shown inside card edges.
+- Arrow keyboard navigation (`↑↓` + `Space`) still works alongside swipe.
 
-## 2026-09-09 — AWS Deployment (EC2 + RDS + ElastiCache + S3)
+### NavBar
+- Logo: "EC" monogram collapsed → "Editor Club" full name expanded; `<Link href="/feed">` (was dead `<div>`).
+- Nav items: Home (`/feed`), Search (`/search`), Upload (`/upload`, creator only), Profile (pinned bottom).
+- Logout removed from sidebar — exists only on `/profile`.
 
-### Infrastructure
-- `infra/cloudformation.yml`: full AWS stack — VPC, public + private
-  subnets, Internet Gateway, route table, security groups (EC2/RDS/Redis),
-  RDS PostgreSQL 15.19 (db.t3.micro), ElastiCache Redis (cache.t3.micro),
-  EC2 t3.small (Amazon Linux 2023, `ami-0619724297c6fa28d`, us-east-2),
-  IAM role with `AmazonSSMManagedInstanceCore` + S3 access policy,
-  EC2 instance profile.
-- EC2 public IP: `18.216.199.64`; API accessible at
-  `http://18.216.199.64:8088`.
-- RDS endpoint: `redactor-db.c1qooqeoynjz.us-east-2.rds.amazonaws.com`
-- ElastiCache endpoint: `redactor-redis.5v2cub.0001.use2.cache.amazonaws.com`
-- Security group `EC2SG` allows inbound TCP 8088 from `0.0.0.0/0`.
+### Bug fixes
+- **Mixed-content block**: added `next.config.ts` rewrite proxying `/api/backend/*` to `https://redactor-api.duckdns.org/*` at Vercel edge. All API calls use `/api/backend` base — browser never makes a cross-origin HTTPS→HTTP request.
+- **EC2 JOIN crash**: `videos.user_id` is `UUID` on EC2 (unlike local `TEXT`); changed all JOINs from `v.user_id = u.id::text` to `v.user_id::uuid = u.id`.
+- **Prerender crash**: `isDivider()` now accepts `FeedItem | undefined` and guards `item != null` before `"_divider" in item`.
 
-### Deployment process (manual, first deploy)
-- EC2 bootstrapped via Session Manager (SSM) — no SSH keys needed.
-- Repo cloned with `sudo git clone` (root ownership); `git pull` requires
-  `sudo git -C /app pull` due to ownership mismatch.
-- Python packages installed to `ssm-user`'s local site-packages
-  (`/home/ssm-user/.local/lib/python3.9/`) — no venv possible in `/app`
-  (root-owned).
-- Systemd services `redactor-api.service` and `redactor-celery.service`
-  created manually (UserData bootstrap runs as root at first boot but
-  packages weren't available then); services run as `ssm-user`.
-- `ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id UUID ...` run
-  manually to migrate existing RDS table.
-
-### Deviations / workarounds
-- University network blocks non-standard ports outbound; home WiFi required
-  for testing on port 8088.
-- EC2 CloudFormation UserData bootstrap installs packages but the venv
-  path (`/app/backend/.venv`) is wrong since `/app` is root-owned.
-  Services point to `/usr/bin/python3` (system Python) instead.
-- `frontend/.env.local` sets `NEXT_PUBLIC_API_URL=http://18.216.199.64:8088`
-  for local frontend dev against the live AWS API.
-
-### End-to-end verified on AWS
-- Register → Login → Upgrade to Creator → Upload video → S3 storage →
-  Celery moderation (4 pillars) → Decision engine → RDS result →
-  Status poll returns full pillar breakdown with verdict.
+### Cleanup
+- Removed unused files: `app/dashboard/page.tsx`, `components/job-detail.tsx`, `components/jobs-table.tsx`, `components/upload-form.tsx`, `components/ui/{badge,button,card,progress}.tsx`, `lib/utils.ts`, `components.json`, `frontend/README.md`, `public/*.svg` (Next.js boilerplate assets).
+- Updated `README.md`, `docs/architecture.md`, `docs/project_status.md`, `docs/changelog.md` to reflect current Editor Club state.

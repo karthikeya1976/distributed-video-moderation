@@ -1,12 +1,12 @@
 # Project Specification: Distributed Video Moderation Platform
 
 > **Note on scope for this build:** This spec preserves the original product
-> vision and roadmap as written. The actual implementation in this repo is a
-> **local, free, mocked version** of the same architecture (no paid APIs or
-> cloud accounts — see `CLAUDE.md` Area 4 and `docs/moderation_policies.md`).
-> Real third-party services (Sightengine, Pex, AWS Rekognition, Cloudflare
-> R2, etc.) are represented as pluggable mock "pillar" modules that can be
-> swapped for real integrations later without changing the architecture.
+> vision and roadmap as written. The implementation has evolved beyond the
+> original mocked design — it now runs on **real AWS infrastructure** (EC2,
+> RDS, ElastiCache, S3) with **real moderation APIs** (Sightengine, AWS
+> Rekognition) and a full social layer (follows, credits, comments, search).
+> See `docs/architecture.md` for the current system design and the mapping
+> table below for which spec items are built vs. still pending.
 
 ## Part 1: Product Requirements (What & Why)
 
@@ -41,9 +41,14 @@
 
 | Spec item | This build |
 |---|---|
-| Cloud object storage (R2/S3) via presigned URL | MinIO (S3-compatible, local), direct upload via FastAPI endpoint |
-| Async queue (BullMQ/Celery) | Celery + Redis (implemented, Milestone 1) |
-| Sightengine (Adult & Deepfakes), Pex (Copyright) | Mock pillar modules with the same interface (implemented, Milestone 2) |
-| Policy engine -> Approved/Flagged/Blocked | `aggregator.py`, thresholds in `docs/moderation_policies.md` (implemented, Milestone 2) |
-| Moderator dashboard with violation timeline | Next.js dashboard (Milestone 3, in progress) |
-| Manual overrides, dynamic policy UI, notifications, retries, multi-tenancy | Not built — out of scope for this learning build, listed here for completeness |
+| Cloud object storage (R2/S3) via presigned URL | **AWS S3** (`amzn-s3-bucket-dvm`, us-east-2); presigned URLs for in-browser streaming |
+| Async queue (BullMQ/Celery) | **Celery + ElastiCache Redis** on AWS EC2 |
+| Sightengine (Adult & Deepfakes), Pex (Copyright) | **Real Sightengine API** (nudity + deepfake); **SHA-256 duplicate detection** replaces copyright fingerprinting |
+| Policy engine → Approved/Flagged/Blocked | **`decision_engine.py`** with 4-pillar thresholds + inverse scoring for filmmaking relevance |
+| Moderator dashboard with violation timeline | Replaced by **TikTok-style reel feed** (`/feed`); pillar scores shown at upload time in result card |
+| Manual overrides | Not built |
+| Dynamic policy UI | Not built |
+| User notifications (new followers / credits) | Not built — listed as pending in `project_status.md` |
+| Advanced retries / dead-letter queues | Not built |
+| Multi-tenancy | Not built |
+| **Beyond spec — social layer** | **Credits** (viewers give stars to creators), **Follow/Enroute** (`follows` table, Enroute/Deroute UI), **Comments** (persisted in DB with author attribution), **Search** (debounced, creators + videos), **Creator profiles** (`/creators/[id]`), **Smart feed** (enrouted first, then recs ranked by credits) |

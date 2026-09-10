@@ -1,92 +1,105 @@
-# Project Status
+# Project Status — Editor Club
 
-## Phase 0: Environment Setup
+## Phase 0: Environment Setup ✅
 - [x] Python 3.11+ installed and verified (3.12.10)
 - [x] Node.js / npm verified (v24.15.0 / 11.12.1)
-- [x] Docker / docker compose verified (Docker 29.3.1 / Compose v5.1.1)
+- [x] Docker / docker compose verified
 - [x] Project repo initialized with docs scaffold
 
-## Milestone 1: Distributed Pipeline & Storage
-- [x] docker-compose with redis, minio, mongo (api/worker run locally via venv, see note below)
-- [x] POST /videos upload endpoint (stores in MinIO, creates Mongo job doc, enqueues task)
-- [x] GET /videos/{job_id}/status endpoint
-- [x] Celery task receives job and updates status (pending -> processing -> received)
+## Milestone 1–3: Pipeline, Moderation, Dashboard ✅
+- [x] FastAPI gateway with upload + status endpoints
+- [x] Celery + Redis async task queue
+- [x] Four moderation pillars (adult content, AI/deepfake, duplicate, filmmaking relevance)
+- [x] Decision engine: approved / flagged / blocked
+- [x] PostgreSQL for job persistence
 
-**Note:** Docker on this machine cannot reach pypi.org during image builds (SSL
-interception issue, likely VPN/AV). Redis, MinIO, and MongoDB run in Docker
-(prebuilt images, no pip install needed). FastAPI app and Celery worker run
-directly on Windows via a Python venv (`backend/venv`). Ports: API on 8088
-(8080 was already in use), Redis mapped to 6380, Mongo to 27018.
+## Milestone 4: v2 Architecture ✅
+- [x] PostgreSQL replaces MongoDB; S3 replaces local disk
+- [x] `decision_engine.py` (renamed from `aggregator.py`)
+- [x] E2E tests updated and passing
 
-## Milestone 2: Multi-Pillar Moderation Layer
-- [x] Mock adult_content pillar
-- [x] Mock ai_deepfake pillar
-- [x] Mock copyright_match pillar
-- [x] Aggregator combining pillar scores into approved/flagged/blocked
-- [x] Status endpoint returns full breakdown (per-pillar scores, flags, reasons)
+## Redactor MVP (2026-09-08) ✅
+- [x] JWT auth: register, login, upgrade viewer → creator
+- [x] `users` table with `account_type`, `department`, `credits`
+- [x] Creator-gated upload (`POST /videos` requires Creator JWT)
+- [x] S3 video storage via boto3 + IAM instance profile
+- [x] Real moderation APIs: Sightengine (nudity + deepfake), AWS Rekognition (filmmaking relevance)
+- [x] SHA-256 duplicate detection pillar
+- [x] Dark-theme frontend redesign (selenium blue, `#0a0a0f` bg)
+- [x] Collapsible vertical sidebar
 
-## Milestone 3: Frontend Dashboard + Scaling Demo
-- [x] GET /videos list endpoint added to FastAPI + CORS middleware
-- [x] Next.js 16 app scaffolded (App Router, TypeScript, Tailwind CSS)
-- [x] lib/api.ts typed API client (uploadVideo, listJobs, getJobStatus + Job type)
-- [x] Upload page (/) with file picker, spinner, error state
-- [x] Dashboard page (/dashboard) — jobs table with 3s polling
-- [x] Per-row expandable detail: pillar score bars + flag timeline + reasons
-- [x] Status/verdict color badges (approved=green, flagged=amber, blocked=red)
-- [x] README.md with run instructions + interview cheat sheet
-- [x] Final docs pass (architecture.md, changelog.md updated)
-- [ ] Worker scaling demo (run manually: start 3 worker terminals, upload 5+ videos)
-
-## Milestone 4: v2 Architecture Upgrade (2026-06-28)
-- [x] PostgreSQL replaces MongoDB (db.py rewritten, docker-compose updated)
-- [x] Temp disk replaces MinIO (storage.py rewritten, UPLOAD_DIR config)
-- [x] decision_engine.py replaces aggregator.py (rename only, no logic change)
-- [x] POST /videos returns {status, task_id} (flow-graph response shape)
-- [x] tasks.py updated: temp disk read, decision_engine import, cleanup_video
-- [x] requirements.txt updated: pymongo+minio removed, psycopg2-binary added
-- [x] frontend/lib/api.ts: uploadVideo return type updated to {task_id, status}
-- [x] e2e tests updated and passing (15/15) against new stack
-- [x] docs updated (changelog, architecture, project_status, CLAUDE.md)
-
-## Redactor MVP (2026-09-08)
-- [x] JWT auth system: register, login, upgrade (viewer → creator)
-- [x] users table in PostgreSQL with account_type + department
-- [x] POST /videos requires Creator JWT; user_id stored on video rows
-- [x] GET /feed returns approved videos only (public)
-- [x] S3 storage via boto3 (replaces local disk)
-- [x] IAM instance profile support (no hardcoded keys on EC2)
-- [x] 4th pillar: filmmaking_relevance (inverse scoring, block below 0.3)
-- [x] BLOCK_BELOW_THRESHOLDS in decision_engine.py
-- [x] Dark-theme frontend redesign (selenium blue accent, #0a0a0f bg)
-- [x] Collapsed vertical sidebar with icon-only + hover-expand labels
-- [x] 4 pages: / (auth), /feed, /upload, /profile
-- [x] frontend/lib/auth.ts: localStorage JWT helpers
-- [x] NEXT_PUBLIC_API_URL env var for configurable API base
-
-## AWS Deployment (2026-09-09)
+## AWS Deployment (2026-09-09) ✅
 - [x] CloudFormation stack: VPC, subnets, IGW, security groups
-- [x] RDS PostgreSQL 15.19 (db.t3.micro) — redactor-db
-- [x] ElastiCache Redis (cache.t3.micro) — redactor-redis
-- [x] EC2 t3.small (Amazon Linux 2023) — public IP 18.216.199.64
-- [x] IAM role: AmazonSSMManagedInstanceCore + S3 access
-- [x] Systemd services: redactor-api + redactor-celery (auto-restart, survive reboots)
-- [x] End-to-end verified on AWS: register → login → upload → S3 → Celery → RDS → result
-- [ ] CloudFormation UserData bootstrap fixed (venv path, root ownership) for automated redeploys
+- [x] RDS PostgreSQL 15 (db.t3.micro)
+- [x] ElastiCache Redis (cache.t3.micro)
+- [x] EC2 t3.small (Amazon Linux 2023)
+- [x] Nginx + Let's Encrypt TLS via DuckDNS (`redactor-api.duckdns.org`)
+- [x] Systemd services: `redactor-api` + `redactor-celery` (auto-restart)
+- [x] Frontend deployed to Vercel (`https://distributed-video-moderation.vercel.app`)
+- [x] End-to-end verified: register → login → upload → S3 → Celery → RDS → feed
 
-## Editor Club — Social Features (2026-09-09 → 2026-09-10)
-- [x] HTTPS: Nginx + Let's Encrypt via DuckDNS (redactor-api.duckdns.org)
-- [x] Frontend deployed to Vercel (https://distributed-video-moderation.vercel.app)
-- [x] S3 presigned URLs for video streaming in feed
-- [x] TikTok-style reel feed: 9:16, auto-play, auto-advance, keyboard nav
-- [x] Real moderation APIs: Sightengine (nudity + deepfake), AWS Rekognition (filmmaking)
-- [x] SHA-256 deduplication pillar (replaces copyright mock)
-- [x] Credits system: viewers give credits to creators; ranked by total credits
-- [x] Follow/Unfollow (Enroute/Deroute): follows table, follow + unfollow endpoints
-- [x] Search page: debounced search for creators and videos
-- [x] Creator profile page (/creators/[id]): avatar, stats, Enroute/Deroute button
-- [x] Comments: persisted in DB (comments table), GET + POST endpoints, live in feed drawer
-- [x] NavBar redesign: Search + Upload + Profile (pinned bottom); logout only on profile page
-- [x] Sidebar brand: "Editor Club" text with "EC" monogram when collapsed
-- [ ] Comments: show commenter avatar/initials from stored profile
-- [ ] Creator profile: list of their approved videos
-- [ ] Notifications for new followers / credits received
+## Editor Club — Social Features (2026-09-10) ✅
+
+### Feed
+- [x] Smart feed algorithm: `{enrouted, recommended}` buckets
+  - Enrouted = videos from followed creators, ordered by recency
+  - Recommended = all others, ordered by `creator.credits DESC, created_at DESC`
+- [x] Section dividers in feed (`Following` / `Recommended`)
+- [x] Swipe navigation: drag up/down on the reel card (mouse + touch); tap to pause
+- [x] Arrow keys still work alongside swipe
+- [x] S3 presigned URLs for in-browser video streaming
+
+### Upload
+- [x] Format toggle: **Scene** (landscape 16:9) vs **Shot** (portrait 9:16)
+- [x] Drop zone shape matches selected format aspect ratio
+- [x] Moderation result shown inline after upload (pillar score bars + reasons)
+
+### Credits
+- [x] `users.credits` integer column (incremented per-video by any viewer)
+- [x] `POST /videos/{id}/credit` endpoint
+- [x] Star button in feed with live count display
+
+### Follow / Enroute
+- [x] `follows` table: `(follower_id, following_id)` primary key
+- [x] `POST /creators/{id}/follow` and `DELETE /creators/{id}/follow`
+- [x] Enroute/Deroute button in feed overlay (creator info bar)
+- [x] Enroute/Deroute button on creator profile page
+- [x] Enroute/Deroute button in search results
+
+### Comments
+- [x] `comments` table: `(id, video_id, user_id, body, created_at)`
+- [x] `GET /videos/{id}/comments` and `POST /videos/{id}/comments`
+- [x] Comment drawer in feed: fetches on open, posts with author attribution
+- [x] Author name + initials shown per comment
+
+### Search
+- [x] `GET /search?q=` — ILIKE across creator names, departments, video filenames
+- [x] Debounced search (400ms) via `useEffect` + `useRef` timer
+- [x] Error state (API unreachable), no-results state, animated loading dots
+- [x] Clear button (×) in search input
+- [x] Creator results: clickable name → profile, Enroute/Deroute button
+- [x] Video results: filename, creator, moderation status chip
+
+### Creator Profile
+- [x] `/creators/[id]` page: avatar (initials), name, department, CREATOR chip
+- [x] Stat tiles: follower count, video count, credits
+- [x] Enroute/Deroute with optimistic update + revert on error
+- [x] Back button
+
+### NavBar / Branding
+- [x] Logo: "EC" collapsed → "Editor Club" expanded (with home link)
+- [x] Nav items: Home (`/feed`), Search (`/search`), Upload (`/upload`, creator only)
+- [x] Profile pinned to bottom slot; logout only on `/profile`
+
+### Bug Fixes
+- [x] Same-origin proxy (`next.config.ts`) eliminates mixed-content HTTPS→HTTP block
+- [x] `isDivider(undefined)` crash at Next.js build time fixed (null guard)
+- [x] `videos.user_id::uuid` JOIN cast fixed (EC2 schema has UUID type, not TEXT)
+- [x] `_CREATE_COMMENTS_TABLE` split into two separate `execute()` calls (psycopg2 single-statement limit)
+
+## Pending / Future
+- [ ] Creator profile: list their approved videos inline
+- [ ] Notifications for new followers and credits received
+- [ ] Saved videos (bookmark persisted to DB, not just local state)
+- [ ] CloudFormation UserData fully automated (no manual `pip install` step)
+- [ ] Remove `/debug/feed` and `/debug/search` endpoints before public launch
