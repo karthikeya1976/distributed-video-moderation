@@ -16,12 +16,12 @@ const RESULT_COLOR: Record<string, string> = {
   blocked:  "#f87171",
 };
 
-type Format = "video" | "clip";
+type Format = "scene" | "shot";
 
 const FORMAT_OPTIONS: { id: Format; label: string; sub: string; ratio: string; icon: React.ReactNode }[] = [
   {
-    id: "video",
-    label: "Video",
+    id: "scene",
+    label: "Scene",
     sub: "Landscape · 16:9",
     ratio: "16 / 9",
     icon: (
@@ -32,8 +32,8 @@ const FORMAT_OPTIONS: { id: Format; label: string; sub: string; ratio: string; i
     ),
   },
   {
-    id: "clip",
-    label: "Clip",
+    id: "shot",
+    label: "Shot",
     sub: "Portrait · 9:16",
     ratio: "9 / 16",
     icon: (
@@ -48,7 +48,7 @@ const FORMAT_OPTIONS: { id: Format; label: string; sub: string; ratio: string; i
 export default function UploadPage() {
   const router    = useRouter();
   const inputRef  = useRef<HTMLInputElement>(null);
-  const [format, setFormat]       = useState<Format>("clip");
+  const [format, setFormat]       = useState<Format>("shot");
   const [file, setFile]           = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError]         = useState("");
@@ -64,7 +64,7 @@ export default function UploadPage() {
 
   // Clear selected file when format changes — aspect ratios differ
   function switchFormat(f: Format) {
-    setFormat(f);
+    setFormat(f as Format);
     setFile(null);
     setJob(null);
     setError("");
@@ -90,7 +90,7 @@ export default function UploadPage() {
   }
 
   const status = job?.overall_status ?? "";
-  const isClip = format === "clip";
+  const isClip = format === "shot";
 
   return (
     <div style={{ maxWidth: "560px", margin: "0 auto" }}>
@@ -125,8 +125,8 @@ export default function UploadPage() {
                 {/* Aspect-ratio preview thumbnail */}
                 <div style={{
                   flexShrink: 0,
-                  width: opt.id === "video" ? "36px" : "20px",
-                  height: opt.id === "video" ? "20px" : "36px",
+                  width: opt.id === "scene" ? "36px" : "20px",
+                  height: opt.id === "scene" ? "20px" : "36px",
                   borderRadius: "4px",
                   background: active ? "rgba(255,255,255,0.25)" : "var(--bg)",
                   border: active ? "none" : "1px solid var(--border)",
@@ -200,13 +200,13 @@ export default function UploadPage() {
                 )}
               </div>
               <p style={{ fontWeight: 500, color: "var(--fg-muted)", fontSize: "13px" }}>
-                Drop {isClip ? "a clip" : "a video"} here
+                Drop {isClip ? "a shot" : "a scene"} here
               </p>
               <p style={{ fontSize: "11px", color: "var(--fg-muted)", marginTop: "4px", opacity: 0.6 }}>
                 or click to browse
               </p>
               <p style={{ fontSize: "10px", color: "var(--fg-muted)", marginTop: "8px", opacity: 0.45 }}>
-                {isClip ? "Portrait 9:16 recommended" : "Landscape 16:9 recommended"}
+                {isClip ? "Shot · Portrait 9:16" : "Scene · Landscape 16:9"}
               </p>
             </>
           )}
@@ -230,7 +230,7 @@ export default function UploadPage() {
           opacity: (!file || uploading) ? 0.45 : 1, transition: "opacity 0.15s",
         }}
       >
-        {uploading ? "Processing…" : `Submit ${format === "clip" ? "clip" : "video"} for moderation`}
+        {uploading ? "Processing…" : `Submit ${format === "shot" ? "shot" : "scene"} for moderation`}
       </button>
 
       {/* Result */}
