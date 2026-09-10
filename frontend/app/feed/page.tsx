@@ -168,13 +168,13 @@ function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void 
 /* ── Section divider item (not a real video) ─────────────────────────────── */
 type SectionDivider = { _divider: true; label: string };
 type FeedItem = Job | SectionDivider;
-function isDivider(item: FeedItem): item is SectionDivider {
-  return "_divider" in item;
+function isDivider(item: FeedItem | undefined): item is SectionDivider {
+  return item != null && "_divider" in item;
 }
 
 /* ── Main feed page ──────────────────────────────────────────────────────── */
 export default function FeedPage() {
-  const [feed, setFeed]               = useState<FeedResponse>({ enrouted: [], recommended: [] });
+  const [, setFeed]                   = useState<FeedResponse>({ enrouted: [], recommended: [] });
   const [items, setItems]             = useState<FeedItem[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState("");
@@ -213,12 +213,7 @@ export default function FeedPage() {
 
   // Play current video item, pause others
   useEffect(() => {
-    // Find which video index corresponds to the current item index
-    let videoIdx = 0;
-    for (let i = 0; i <= current && i < items.length; i++) {
-      if (!isDivider(items[i])) videoIdx = i;
-    }
-    videoItems.forEach((job, i) => {
+    videoItems.forEach(job => {
       const el = videoRefs.current[job.job_id];
       if (!el) return;
       if (items[current] === job) { el.play().catch(() => {}); setPaused(false); }
