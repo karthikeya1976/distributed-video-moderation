@@ -161,7 +161,7 @@ def get_feed(limit: int = 50, viewer_id: Optional[str] = None) -> dict[str, Any]
                     SELECT v.*, u.name AS creator_name, u.department AS creator_department,
                            u.credits AS creator_credits
                     FROM videos v
-                    JOIN users u ON v.user_id = u.id::text
+                    JOIN users u ON v.user_id::uuid = u.id
                     JOIN follows f ON f.following_id = u.id
                     WHERE v.overall_status IN ('approved', 'flagged')
                       AND f.follower_id = %s::uuid
@@ -177,7 +177,7 @@ def get_feed(limit: int = 50, viewer_id: Optional[str] = None) -> dict[str, Any]
                 SELECT v.*, u.name AS creator_name, u.department AS creator_department,
                        u.credits AS creator_credits
                 FROM videos v
-                JOIN users u ON v.user_id = u.id::text
+                JOIN users u ON v.user_id::uuid = u.id
                 WHERE v.overall_status IN ('approved', 'flagged')
                   AND v.id NOT IN %s
                 ORDER BY
@@ -309,7 +309,7 @@ def get_creator_profile(creator_id: str, viewer_id: Optional[str] = None) -> Opt
                COUNT(DISTINCT v.id) AS video_count
         FROM users u
         LEFT JOIN follows f ON f.following_id = u.id
-        LEFT JOIN videos v ON v.user_id = u.id::text AND v.overall_status IN ('approved','flagged')
+        LEFT JOIN videos v ON v.user_id::uuid = u.id AND v.overall_status IN ('approved','flagged')
         WHERE u.id = %s::uuid
         GROUP BY u.id
     """
@@ -342,7 +342,7 @@ def search(query: str) -> dict:
         SELECT v.id, v.filename, v.overall_status, v.created_at,
                u.name AS creator_name, u.department AS creator_department
         FROM videos v
-        LEFT JOIN users u ON v.user_id = u.id::text
+        LEFT JOIN users u ON v.user_id::uuid = u.id
         WHERE v.filename ILIKE %s AND v.overall_status IN ('approved','flagged')
         LIMIT 10
     """
