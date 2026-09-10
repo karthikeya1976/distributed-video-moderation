@@ -47,54 +47,65 @@ export default function FeedPage() {
           <p style={{ fontSize: "13px", marginTop: "6px" }}>Upload filmmaking content to get started.</p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px", maxWidth: "380px", margin: "0 auto" }}>
           {jobs.map(job => (
             <div
               key={job.job_id}
               style={{
                 background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: "12px", overflow: "hidden",
+                borderRadius: "16px", overflow: "hidden",
               }}
             >
-              {/* Video player — shown when a presigned URL is available */}
-              {playing === job.job_id && job.video_url ? (
-                <video
-                  src={job.video_url}
-                  controls
-                  autoPlay
-                  style={{ width: "100%", maxHeight: "360px", background: "#000", display: "block" }}
-                />
-              ) : job.video_url ? (
-                <div
-                  onClick={() => setPlaying(job.job_id)}
-                  style={{
-                    position: "relative", cursor: "pointer",
-                    background: "#000", height: "180px",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  <div style={{
-                    width: "56px", height: "56px", borderRadius: "50%",
-                    background: "rgba(65,105,225,0.85)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    {/* Play triangle */}
-                    <div style={{
-                      width: 0, height: 0,
-                      borderTop: "12px solid transparent",
-                      borderBottom: "12px solid transparent",
-                      borderLeft: "20px solid #fff",
-                      marginLeft: "4px",
-                    }} />
-                  </div>
-                  <p style={{
-                    position: "absolute", bottom: "10px", left: "14px",
-                    fontSize: "12px", color: "rgba(255,255,255,0.6)", margin: 0,
-                  }}>
-                    Click to play
-                  </p>
+              {/* Video player — vertical reel format (9:16) */}
+              {job.video_url && (
+                <div style={{
+                  position: "relative",
+                  width: "100%",
+                  paddingTop: "177.78%", /* 16:9 inverted = 9:16 */
+                  background: "#000",
+                  overflow: "hidden",
+                }}>
+                  {playing === job.job_id ? (
+                    <video
+                      src={job.video_url}
+                      controls
+                      autoPlay
+                      style={{
+                        position: "absolute", inset: 0,
+                        width: "100%", height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => setPlaying(job.job_id)}
+                      style={{
+                        position: "absolute", inset: 0,
+                        display: "flex", flexDirection: "column",
+                        alignItems: "center", justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{
+                        width: "64px", height: "64px", borderRadius: "50%",
+                        background: "rgba(65,105,225,0.85)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <div style={{
+                          width: 0, height: 0,
+                          borderTop: "13px solid transparent",
+                          borderBottom: "13px solid transparent",
+                          borderLeft: "22px solid #fff",
+                          marginLeft: "5px",
+                        }} />
+                      </div>
+                      <p style={{ marginTop: "12px", fontSize: "12px", color: "rgba(255,255,255,0.5)" }}>
+                        Click to play
+                      </p>
+                    </div>
+                  )}
                 </div>
-              ) : null}
+              )}
 
               {/* Metadata row */}
               <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
