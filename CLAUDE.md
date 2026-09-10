@@ -76,7 +76,7 @@ Threshold rules: `docs/moderation_policies.md`
 
 - Commit on logical feature boundaries with a clear message.
 - `.gitignore` covers: `backend/venv/`, `node_modules/`, `.next/`, `__pycache__/`, `uploads/`, `frames/`, `.env*`.
-- Run `python scripts/scan-repo.py` before committing to catch dead files, stale docs, and leaked secrets.
+- A pre-commit hook (`.git/hooks/pre-commit`) runs `scripts/scan-repo.py` automatically before every `git commit`. It blocks on secrets / `.env.example` drift and warns on dead files / TODOs. Run `python scripts/scan-repo.py --fix` to interactively delete dead files.
 - Update `docs/project_status.md` and `docs/changelog.md` with every significant change.
 
 ---

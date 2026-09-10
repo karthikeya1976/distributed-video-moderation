@@ -97,6 +97,10 @@
 - [x] `videos.user_id::uuid` JOIN cast fixed (EC2 schema has UUID type, not TEXT)
 - [x] `_CREATE_COMMENTS_TABLE` split into two separate `execute()` calls (psycopg2 single-statement limit)
 
+### Repo Health Tooling
+- [x] `scripts/scan-repo.py`: 6-check scanner (secrets, dead code, .env drift, stale docs, TODOs)
+- [x] `.git/hooks/pre-commit`: auto-runs scanner before every commit; blocks on critical issues, warns on non-blocking ones; Windows-compatible (shell script, not Python shebang)
+
 ## Pending / Future
 - [ ] Creator profile: list their approved videos inline
 - [ ] Notifications for new followers and credits received

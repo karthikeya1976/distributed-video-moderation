@@ -88,3 +88,7 @@
 ### Cleanup
 - Removed unused files: `app/dashboard/page.tsx`, `components/job-detail.tsx`, `components/jobs-table.tsx`, `components/upload-form.tsx`, `components/ui/{badge,button,card,progress}.tsx`, `lib/utils.ts`, `components.json`, `frontend/README.md`, `public/*.svg` (Next.js boilerplate assets).
 - Updated `README.md`, `docs/architecture.md`, `docs/project_status.md`, `docs/changelog.md` to reflect current Editor Club state.
+
+### Repo health tooling
+- Added `scripts/scan-repo.py`: scans for tracked secrets, dead Python modules, dead frontend components, `.env.example` drift, stale docs (>30d), and TODO/FIXME markers. Run with `--fix` to auto-delete dead files.
+- Added `.git/hooks/pre-commit` (shell script): runs `scan-repo.py` before every commit. Blocks on secrets or `.env.example` drift; warns (non-blocking) on dead files, stale docs, and TODOs. Resolves Windows Python path by searching known install locations rather than relying on the `python3` shebang (which hits the Windows Store stub on Git Bash).
