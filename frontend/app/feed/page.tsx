@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { getFeed, giveCredit, followCreator, unfollowCreator, type Job } from "@/lib/api";
-import { isLoggedIn, getUser } from "@/lib/auth";
+import Link from "next/link";
+import { getFeed, giveCredit, followCreator, unfollowCreator, getComments, postComment, type Job, type Comment } from "@/lib/api";
+import { isLoggedIn } from "@/lib/auth";
 
 /* ── SVG icon components ─────────────────────────────────────────────────── */
 function IconStar({ filled }: { filled: boolean }) {
@@ -70,15 +71,29 @@ function ActionBtn({ onClick, icon, label, active }: {
 }
 
 /* ── Comment drawer ──────────────────────────────────────────────────────── */
-function CommentDrawer({ job, onClose }: { job: Job; onClose: () => void }) {
-  const [text, setText] = useState("");
-  const [comments, setComments] = useState<{ id: number; text: string; time: string }[]>([]);
+function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void }) {
+  const [text, setText]       = useState("");
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [posting, setPosting] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  useEffect(() => {
+    getComments(jobId)
+      .then(setComments)
+      .finally(() => setLoading(false));
+  }, [jobId]);
+
+  async function submit(e: React.SyntheticEvent) {
     e.preventDefault();
-    if (!text.trim()) return;
-    setComments(c => [...c, { id: Date.now(), text: text.trim(), time: "Just now" }]);
-    setText("");
+    if (!text.trim() || posting) return;
+    setPosting(true);
+    try {
+      const c = await postComment(jobId, text.trim());
+      setComments(prev => [...prev, c]);
+      setText("");
+    } finally {
+      setPosting(false);
+    }
   }
 
   return (
@@ -104,7 +119,9 @@ function CommentDrawer({ job, onClose }: { job: Job; onClose: () => void }) {
 
         {/* Comments list */}
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", minHeight: "80px" }}>
-          {comments.length === 0 ? (
+          {loading ? (
+            <p style={{ fontSize: "13px", color: "var(--fg-muted)", textAlign: "center", paddingTop: "20px" }}>Loading…</p>
+          ) : comments.length === 0 ? (
             <p style={{ fontSize: "13px", color: "var(--fg-muted)", textAlign: "center", paddingTop: "20px" }}>
               No comments yet. Be the first!
             </p>
@@ -115,10 +132,10 @@ function CommentDrawer({ job, onClose }: { job: Job; onClose: () => void }) {
                 background: "var(--accent)", flexShrink: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: "13px", fontWeight: 700, color: "#fff",
-              }}>U</div>
+              }}>{(c.author_name ?? "?").charAt(0).toUpperCase()}</div>
               <div>
-                <p style={{ fontSize: "13px", color: "var(--fg)", margin: 0 }}>{c.text}</p>
-                <p style={{ fontSize: "11px", color: "var(--fg-muted)", margin: "2px 0 0" }}>{c.time}</p>
+                <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--accent)", margin: 0 }}>{c.author_name ?? "Anonymous"}</p>
+                <p style={{ fontSize: "13px", color: "var(--fg)", margin: "2px 0 0" }}>{c.body}</p>
               </div>
             </div>
           ))}
@@ -136,10 +153,11 @@ function CommentDrawer({ job, onClose }: { job: Job; onClose: () => void }) {
               color: "var(--fg)", outline: "none",
             }}
           />
-          <button type="submit" style={{
+          <button type="submit" disabled={posting} style={{
             background: "var(--accent)", color: "#fff", border: "none",
             borderRadius: "999px", padding: "9px 18px", fontSize: "13px",
-            fontWeight: 600, cursor: "pointer",
+            fontWeight: 600, cursor: posting ? "not-allowed" : "pointer",
+            opacity: posting ? 0.6 : 1,
           }}>Post</button>
         </form>
       </div>
@@ -287,9 +305,12 @@ export default function FeedPage() {
               }}>{initials}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                  <p style={{ fontWeight: 700, fontSize: "14px", color: "#fff", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+                  <Link
+                    href={job.user_id ? `/creators/${job.user_id}` : "#"}
+                    style={{ pointerEvents: "all", fontWeight: 700, fontSize: "14px", color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.8)", textDecoration: "none" }}
+                  >
                     {job.creator_name ?? "Unknown"}
-                  </p>
+                  </Link>
                   <span style={{
                     fontSize: "10px", fontWeight: 600, padding: "1px 6px",
                     borderRadius: "999px", background: "var(--accent)",
@@ -390,7 +411,7 @@ export default function FeedPage() {
       </div>
 
       {/* Comment drawer */}
-      {commenting && <CommentDrawer job={job} onClose={() => setCommenting(false)} />}
+      {commenting && <CommentDrawer jobId={job.job_id} onClose={() => setCommenting(false)} />}
     </>
   );
 }

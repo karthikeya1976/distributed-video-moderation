@@ -72,4 +72,21 @@ directly on Windows via a Python venv (`backend/venv`). Ports: API on 8088
 - [x] Systemd services: redactor-api + redactor-celery (auto-restart, survive reboots)
 - [x] End-to-end verified on AWS: register → login → upload → S3 → Celery → RDS → result
 - [ ] CloudFormation UserData bootstrap fixed (venv path, root ownership) for automated redeploys
-- [ ] Frontend deployed to a public URL (currently local only, points at EC2 API)
+
+## Editor Club — Social Features (2026-09-09 → 2026-09-10)
+- [x] HTTPS: Nginx + Let's Encrypt via DuckDNS (redactor-api.duckdns.org)
+- [x] Frontend deployed to Vercel (https://distributed-video-moderation.vercel.app)
+- [x] S3 presigned URLs for video streaming in feed
+- [x] TikTok-style reel feed: 9:16, auto-play, auto-advance, keyboard nav
+- [x] Real moderation APIs: Sightengine (nudity + deepfake), AWS Rekognition (filmmaking)
+- [x] SHA-256 deduplication pillar (replaces copyright mock)
+- [x] Credits system: viewers give credits to creators; ranked by total credits
+- [x] Follow/Unfollow (Enroute/Deroute): follows table, follow + unfollow endpoints
+- [x] Search page: debounced search for creators and videos
+- [x] Creator profile page (/creators/[id]): avatar, stats, Enroute/Deroute button
+- [x] Comments: persisted in DB (comments table), GET + POST endpoints, live in feed drawer
+- [x] NavBar redesign: Search + Upload + Profile (pinned bottom); logout only on profile page
+- [x] Sidebar brand: "Editor Club" text with "EC" monogram when collapsed
+- [ ] Comments: show commenter avatar/initials from stored profile
+- [ ] Creator profile: list of their approved videos
+- [ ] Notifications for new followers / credits received

@@ -120,6 +120,29 @@ Changes:
 - `NEXT_PUBLIC_API_URL` env var added; falls back to `localhost:8088` for
   local dev.
 
+## 2026-09-10 — Editor Club Social Features
+
+### Creator profile page
+- New route `/creators/[id]` with avatar, stat tiles (followers, videos,
+  credits), Enroute/Deroute button, and bio generated from department.
+- Creator names in the feed overlay and search results are now clickable
+  links navigating to the profile page.
+
+### Persistent comments
+- `comments` table in PostgreSQL: `id UUID`, `video_id TEXT`,
+  `user_id UUID`, `body TEXT`, `created_at TIMESTAMPTZ`.
+- `GET /videos/{job_id}/comments` and `POST /videos/{job_id}/comments`
+  endpoints (token passed as query param so no CORS preflight on reads).
+- `CommentDrawer` in the feed now fetches real comments on open and posts
+  new ones; shows author initials + name from `users` JOIN.
+- `_ensure_schema()` updated to create the comments table on startup.
+
+### NavBar + branding
+- Logout button removed from sidebar entirely — lives only on `/profile`.
+- Profile icon moved to the pinned bottom slot (where logout was).
+- Clapperboard icon replaced with "Editor Club" text / "EC" monogram
+  (collapsed state shows initials, hover shows full name).
+
 ## 2026-09-09 — AWS Deployment (EC2 + RDS + ElastiCache + S3)
 
 ### Infrastructure

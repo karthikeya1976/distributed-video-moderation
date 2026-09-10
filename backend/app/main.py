@@ -216,3 +216,28 @@ def search(q: str = "") -> dict:
     if not q.strip():
         return {"creators": [], "videos": []}
     return db.search(q.strip())
+
+
+# ── Comments ──────────────────────────────────────────────────────────────────
+
+class CommentRequest(BaseModel):
+    body: str
+
+
+@app.get("/videos/{job_id}/comments")
+def list_comments(job_id: str) -> list:
+    return db.get_comments(job_id)
+
+
+@app.post("/videos/{job_id}/comments")
+def post_comment(job_id: str, req: CommentRequest, token: Optional[str] = None) -> dict:
+    user_id = None
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            user_id = payload["sub"]
+        except JWTError:
+            pass
+    if not req.body.strip():
+        raise HTTPException(status_code=400, detail="Comment body cannot be empty")
+    return db.add_comment(job_id, req.body.strip(), user_id)

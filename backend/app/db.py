@@ -45,6 +45,17 @@ CREATE TABLE IF NOT EXISTS follows (
 );
 """
 
+_CREATE_COMMENTS_TABLE = """
+CREATE TABLE IF NOT EXISTS comments (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_id   TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+    body       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_comments_video_id ON comments(video_id);
+"""
+
 
 
 def _connect():
@@ -59,6 +70,7 @@ def _ensure_schema() -> None:
             cur.execute(_CREATE_USERS_TABLE)
             cur.execute(_CREATE_TABLE)
             cur.execute(_CREATE_FOLLOWS_TABLE)
+            cur.execute(_CREATE_COMMENTS_TABLE)
             # Migrations for columns added after initial schema
             cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL")
             cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS file_hash TEXT")
@@ -307,3 +319,44 @@ def search(query: str) -> dict:
     for v in videos:
         v["id"] = str(v["id"])
     return {"creators": creators, "videos": videos}
+
+
+# ── Comments ──────────────────────────────────────────────────────────────────
+
+def add_comment(video_id: str, body: str, user_id: Optional[str] = None) -> dict:
+    """Insert a comment and return it with author name."""
+    sql = """
+        INSERT INTO comments (video_id, user_id, body)
+        VALUES (%s, %s::uuid, %s)
+        RETURNING id, video_id, user_id, body, created_at
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (video_id, user_id, body))
+            row = dict(cur.fetchone())
+    row["id"] = str(row["id"])
+    row["user_id"] = str(row["user_id"]) if row["user_id"] else None
+    return row
+
+
+def get_comments(video_id: str, limit: int = 50) -> list[dict]:
+    """Return comments for a video, newest first, with author name."""
+    sql = """
+        SELECT c.id, c.body, c.created_at,
+               u.name AS author_name
+        FROM comments c
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.video_id = %s
+        ORDER BY c.created_at ASC
+        LIMIT %s
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (video_id, limit))
+            rows = cur.fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["id"] = str(d["id"])
+        result.append(d)
+    return result

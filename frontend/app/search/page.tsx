@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { searchAll, followCreator, unfollowCreator, type SearchResult } from "@/lib/api";
 import { isLoggedIn } from "@/lib/auth";
@@ -126,7 +127,9 @@ export default function SearchPage() {
                   {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <p style={{ fontWeight: 600, fontSize: "14px", color: "var(--fg)", margin: 0 }}>{c.name}</p>
+                      <Link href={`/creators/${c.id}`} style={{ fontWeight: 600, fontSize: "14px", color: "var(--fg)", textDecoration: "none" }}>
+                        {c.name}
+                      </Link>
                       <span style={chip}>CREATOR</span>
                     </div>
                     <p style={{ fontSize: "12px", color: "var(--fg-muted)", margin: "2px 0 0" }}>

@@ -206,3 +206,32 @@ export async function searchAll(q: string): Promise<SearchResult> {
   if (!res.ok) throw new Error("Search failed");
   return res.json();
 }
+
+// ── Comments ───────────────────────────────────────────────────────────────────
+
+export type Comment = {
+  id: string;
+  body: string;
+  author_name?: string;
+  created_at: string;
+};
+
+export async function getComments(jobId: string): Promise<Comment[]> {
+  const res = await fetch(`${API}/videos/${jobId}/comments`);
+  if (!res.ok) throw new Error("Comments fetch failed");
+  return res.json();
+}
+
+export async function postComment(jobId: string, body: string): Promise<Comment> {
+  const token = getToken();
+  const url = token
+    ? `${API}/videos/${jobId}/comments?token=${token}`
+    : `${API}/videos/${jobId}/comments`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) throw new Error("Post comment failed");
+  return res.json();
+}
