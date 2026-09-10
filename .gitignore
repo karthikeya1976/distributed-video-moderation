@@ -7,3 +7,6 @@ node_modules/
 .next/
 frontend/.env*
 backend/venv/
+
+# Local-only notes (deployment ops, interview prep) — never publish
+docs/private-notes.md
