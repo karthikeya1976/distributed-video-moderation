@@ -38,7 +38,7 @@ export default function FeedPage() {
     <div>
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--fg)" }}>Feed</h1>
-        <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginTop: "4px" }}>Approved filmmaking content</p>
+        <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginTop: "4px" }}>Approved &amp; reviewed filmmaking content</p>
       </div>
 
       {jobs.length === 0 ? (
