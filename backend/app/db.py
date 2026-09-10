@@ -52,8 +52,11 @@ CREATE TABLE IF NOT EXISTS comments (
     user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
     body       TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_comments_video_id ON comments(video_id);
+)
+"""
+
+_CREATE_COMMENTS_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_comments_video_id ON comments(video_id)
 """
 
 
@@ -67,14 +70,17 @@ def _connect():
 def _ensure_schema() -> None:
     with _connect() as conn:
         with conn.cursor() as cur:
+            # Core tables (order matters: users before videos before follows/comments)
             cur.execute(_CREATE_USERS_TABLE)
             cur.execute(_CREATE_TABLE)
             cur.execute(_CREATE_FOLLOWS_TABLE)
             cur.execute(_CREATE_COMMENTS_TABLE)
-            # Migrations for columns added after initial schema
-            cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL")
+            cur.execute(_CREATE_COMMENTS_INDEX)
+            # Column migrations — safe to re-run because of IF NOT EXISTS
+            cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id TEXT")
             cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS file_hash TEXT")
-            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE users  ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0")
+            cur.execute("ALTER TABLE users  ADD COLUMN IF NOT EXISTS department TEXT")
 
 
 

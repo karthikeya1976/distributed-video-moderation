@@ -85,6 +85,28 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/debug/feed")
+def debug_feed() -> dict:
+    """Temporary debug endpoint — returns the actual exception from get_feed()."""
+    import traceback
+    try:
+        data = db.get_feed(5, None)
+        return {"ok": True, "enrouted": len(data["enrouted"]), "recommended": len(data["recommended"])}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "trace": traceback.format_exc()}
+
+
+@app.get("/debug/search")
+def debug_search() -> dict:
+    """Temporary debug endpoint — returns the actual exception from search()."""
+    import traceback
+    try:
+        data = db.search("test")
+        return {"ok": True, "creators": len(data["creators"]), "videos": len(data["videos"])}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "trace": traceback.format_exc()}
+
+
 def _require_creator(token: str = Depends(oauth2_scheme)) -> str:
     """Decode JWT and verify account_type == creator. Returns user_id."""
     try:
