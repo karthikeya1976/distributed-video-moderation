@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Clapperboard, Search, Upload, User } from "lucide-react";
+import { Search, Upload, User } from "lucide-react";
 import { isLoggedIn, isCreator } from "@/lib/auth";
 
 type NavItem = {
@@ -39,13 +39,18 @@ export default function NavBar() {
       style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 min-h-[64px]"
+      <div className="flex items-center px-4 py-5 min-h-[64px] overflow-hidden"
            style={{ borderBottom: "1px solid var(--border)" }}>
-        <Clapperboard size={22} className="shrink-0" style={{ color: "var(--accent)" }} />
-        <span className="font-bold text-base tracking-tight whitespace-nowrap
-                         opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              style={{ color: "var(--fg)" }}>
-          Redactor
+        {/* Collapsed: show "EC" monogram; expanded: show full name */}
+        <span className="font-black text-base tracking-tight whitespace-nowrap shrink-0
+                         group-hover:hidden"
+              style={{ color: "var(--accent)" }}>
+          EC
+        </span>
+        <span className="font-black text-base tracking-tight whitespace-nowrap hidden
+                         group-hover:block"
+              style={{ color: "var(--accent)" }}>
+          Editor Club
         </span>
       </div>
 
