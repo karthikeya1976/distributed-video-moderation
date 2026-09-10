@@ -72,10 +72,10 @@ function ActionBtn({ onClick, icon, label, active }: {
 
 /* ── Comment drawer ──────────────────────────────────────────────────────── */
 function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void }) {
-  const [text, setText]       = useState("");
+  const [text, setText]         = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [posting, setPosting] = useState(false);
+  const [loading, setLoading]   = useState(true);
+  const [posting, setPosting]   = useState(false);
 
   useEffect(() => {
     getComments(jobId)
@@ -98,11 +98,9 @@ function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void 
 
   return (
     <>
-      {/* Backdrop */}
       <div onClick={onClose} style={{
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 10,
       }} />
-      {/* Sheet */}
       <div style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "min(480px, 100vw)", maxHeight: "60vh",
@@ -111,20 +109,14 @@ function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void 
         display: "flex", flexDirection: "column", gap: "12px",
         boxShadow: "0 -4px 40px rgba(0,0,0,0.4)",
       }}>
-        {/* Handle */}
         <div style={{ width: "40px", height: "4px", borderRadius: "999px", background: "var(--border)", margin: "0 auto" }} />
-        <p style={{ fontWeight: 700, fontSize: "15px", color: "var(--fg)", textAlign: "center", margin: 0 }}>
-          Comments
-        </p>
+        <p style={{ fontWeight: 700, fontSize: "15px", color: "var(--fg)", textAlign: "center", margin: 0 }}>Comments</p>
 
-        {/* Comments list */}
         <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px", minHeight: "80px" }}>
           {loading ? (
             <p style={{ fontSize: "13px", color: "var(--fg-muted)", textAlign: "center", paddingTop: "20px" }}>Loading…</p>
           ) : comments.length === 0 ? (
-            <p style={{ fontSize: "13px", color: "var(--fg-muted)", textAlign: "center", paddingTop: "20px" }}>
-              No comments yet. Be the first!
-            </p>
+            <p style={{ fontSize: "13px", color: "var(--fg-muted)", textAlign: "center", paddingTop: "20px" }}>No comments yet. Be the first!</p>
           ) : comments.map(c => (
             <div key={c.id} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
               <div style={{
@@ -141,7 +133,6 @@ function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void 
           ))}
         </div>
 
-        {/* Input */}
         <form onSubmit={submit} style={{ display: "flex", gap: "8px" }}>
           <input
             value={text}
@@ -165,34 +156,103 @@ function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void 
   );
 }
 
-/* ── Section divider item (not a real video) ─────────────────────────────── */
+/* ── Section divider ─────────────────────────────────────────────────────── */
 type SectionDivider = { _divider: true; label: string };
 type FeedItem = Job | SectionDivider;
 function isDivider(item: FeedItem | undefined): item is SectionDivider {
   return item != null && "_divider" in item;
 }
 
+/* ── Swipeable reel card ─────────────────────────────────────────────────── */
+function SwipeCard({
+  children,
+  onSwipeUp,
+  onSwipeDown,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onSwipeUp: () => void;
+  onSwipeDown: () => void;
+  onClick: () => void;
+}) {
+  const startY   = useRef<number | null>(null);
+  const startX   = useRef<number | null>(null);
+  const dragging = useRef(false);
+
+  function onPointerDown(e: React.PointerEvent) {
+    startY.current   = e.clientY;
+    startX.current   = e.clientX;
+    dragging.current = false;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    if (startY.current === null) return;
+    if (Math.abs(e.clientY - startY.current) > 8) dragging.current = true;
+  }
+
+  function onPointerUp(e: React.PointerEvent) {
+    if (startY.current === null) return;
+    const dy = e.clientY - startY.current;
+    const dx = startX.current !== null ? Math.abs(e.clientX - startX.current) : 0;
+
+    if (dragging.current && Math.abs(dy) > 40 && Math.abs(dy) > dx) {
+      // Vertical swipe — treat as navigation
+      if (dy < 0) onSwipeUp();   // swipe up = next
+      else        onSwipeDown(); // swipe down = prev
+    } else if (!dragging.current) {
+      // No meaningful movement = tap/click
+      onClick();
+    }
+
+    startY.current   = null;
+    startX.current   = null;
+    dragging.current = false;
+  }
+
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      style={{
+        position: "relative",
+        width: "min(380px, 100%)",
+        aspectRatio: "9 / 16",
+        background: "#000",
+        borderRadius: "20px",
+        overflow: "hidden",
+        boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
+        touchAction: "none",   // prevent browser scroll hijacking on mobile
+        userSelect: "none",
+        cursor: "grab",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ── Main feed page ──────────────────────────────────────────────────────── */
 export default function FeedPage() {
-  const [, setFeed]                   = useState<FeedResponse>({ enrouted: [], recommended: [] });
-  const [items, setItems]             = useState<FeedItem[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState("");
-  const [current, setCurrent]         = useState(0);
-  const [credited, setCredited]       = useState<Record<string, boolean>>({});
+  const [, setFeed]                     = useState<FeedResponse>({ enrouted: [], recommended: [] });
+  const [items, setItems]               = useState<FeedItem[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState("");
+  const [current, setCurrent]           = useState(0);
+  const [credited, setCredited]         = useState<Record<string, boolean>>({});
   const [creditCounts, setCreditCounts] = useState<Record<string, number>>({});
-  const [saved, setSaved]             = useState<Record<string, boolean>>({});
-  const [following, setFollowing]     = useState<Record<string, boolean>>({});
-  const [paused, setPaused]           = useState(false);
-  const [commenting, setCommenting]   = useState(false);
-  const [toast, setToast]             = useState("");
-  const videoRefs                     = useRef<Record<string, HTMLVideoElement | null>>({});
+  const [saved, setSaved]               = useState<Record<string, boolean>>({});
+  const [following, setFollowing]       = useState<Record<string, boolean>>({});
+  const [paused, setPaused]             = useState(false);
+  const [commenting, setCommenting]     = useState(false);
+  const [toast, setToast]               = useState("");
+  const videoRefs                       = useRef<Record<string, HTMLVideoElement | null>>({});
 
   useEffect(() => {
     getFeed()
       .then(data => {
         setFeed(data);
-        // Build ordered item list: enrouted first (with section header), then recommended
         const list: FeedItem[] = [];
         if (data.enrouted.length > 0) {
           list.push({ _divider: true, label: "Following" });
@@ -208,10 +268,8 @@ export default function FeedPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Collect only real video items for playback control
   const videoItems = items.filter((i): i is Job => !isDivider(i));
 
-  // Play current video item, pause others
   useEffect(() => {
     videoItems.forEach(job => {
       const el = videoRefs.current[job.job_id];
@@ -231,7 +289,6 @@ export default function FeedPage() {
     else           { el.pause(); setPaused(true); }
   }, [currentJob]);
 
-  // Skip over dividers when navigating
   const goNext = useCallback(() => {
     setCurrent(c => {
       let next = c + 1;
@@ -248,6 +305,7 @@ export default function FeedPage() {
     });
   }, [items]);
 
+  // Keyboard navigation still works alongside swipe
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") goNext();
@@ -281,17 +339,12 @@ export default function FeedPage() {
     </div>
   );
 
-  // If current item is a divider, show it instead of the reel
   const currentItem = items[current];
-  if (isDivider(currentItem)) {
-    // Auto-advance past dividers after a brief moment
-    setTimeout(() => goNext(), 600);
-  }
+  if (isDivider(currentItem)) setTimeout(() => goNext(), 600);
 
-  const job = currentJob ?? videoItems[0];
+  const job      = currentJob ?? videoItems[0];
   const initials = (job.creator_name ?? "?").charAt(0).toUpperCase();
 
-  // Label for the section the current video belongs to
   const sectionLabel = (() => {
     for (let i = current; i >= 0; i--) {
       if (isDivider(items[i])) return (items[i] as SectionDivider).label;
@@ -299,20 +352,25 @@ export default function FeedPage() {
     return null;
   })();
 
+  const videoIdx  = videoItems.indexOf(job);
+  const isFirst   = videoIdx === 0;
+  const isLast    = videoIdx === videoItems.length - 1;
+
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
 
-        {/* Reel card */}
-        <div style={{
-          position: "relative",
-          width: "min(380px, 100%)",
-          aspectRatio: "9 / 16",
-          background: "#000",
-          borderRadius: "20px",
-          overflow: "hidden",
-          boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
-        }}>
+        {/* Section label above card */}
+        {sectionLabel && (
+          <p style={{
+            fontSize: "10px", fontWeight: 700, color: "var(--accent)",
+            textTransform: "uppercase", letterSpacing: "0.1em",
+            marginBottom: "8px",
+          }}>{sectionLabel}</p>
+        )}
+
+        {/* Swipeable reel card */}
+        <SwipeCard onSwipeUp={goNext} onSwipeDown={goPrev} onClick={togglePause}>
           {/* Video */}
           {job.video_url ? (
             <video
@@ -320,9 +378,8 @@ export default function FeedPage() {
               ref={el => { videoRefs.current[job.job_id] = el; }}
               src={job.video_url}
               playsInline
-              onClick={togglePause}
               onEnded={goNext}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "pointer" }}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
             />
           ) : (
             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -342,6 +399,22 @@ export default function FeedPage() {
             </div>
           )}
 
+          {/* Swipe hint arrows — subtle, fade out after first swipe */}
+          {!isFirst && (
+            <div style={{
+              position: "absolute", top: "14px", left: "50%", transform: "translateX(-50%)",
+              color: "rgba(255,255,255,0.45)", fontSize: "18px", pointerEvents: "none",
+              lineHeight: 1,
+            }}>↑</div>
+          )}
+          {!isLast && (
+            <div style={{
+              position: "absolute", bottom: "14px", left: "50%", transform: "translateX(-50%)",
+              color: "rgba(255,255,255,0.45)", fontSize: "18px", pointerEvents: "none",
+              lineHeight: 1,
+            }}>↓</div>
+          )}
+
           {/* Bottom gradient + creator info */}
           <div style={{
             position: "absolute", bottom: 0, left: 0, right: "64px",
@@ -349,15 +422,13 @@ export default function FeedPage() {
             background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)",
             pointerEvents: "none",
           }}>
-            {/* Creator row */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
               <div style={{
                 width: "36px", height: "36px", borderRadius: "50%",
                 background: "var(--accent)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: "15px", fontWeight: 700, color: "#fff",
-                border: "2px solid rgba(255,255,255,0.6)",
-                flexShrink: 0,
+                border: "2px solid rgba(255,255,255,0.6)", flexShrink: 0,
               }}>{initials}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
@@ -381,7 +452,7 @@ export default function FeedPage() {
               </div>
             </div>
 
-            {/* Enroute / Deroute button */}
+            {/* Enroute / Deroute */}
             {job.user_id && (
               <button
                 onClick={() => {
@@ -399,9 +470,7 @@ export default function FeedPage() {
                   borderRadius: "999px", cursor: "pointer",
                   background: following[job.user_id] ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.9)",
                   color: following[job.user_id] ? "#fff" : "#111",
-                  border: "none",
-                  backdropFilter: "blur(4px)",
-                  transition: "all 0.15s",
+                  border: "none", backdropFilter: "blur(4px)", transition: "all 0.15s",
                 }}
               >
                 {following[job.user_id] ? "Deroute" : "Enroute"}
@@ -416,7 +485,7 @@ export default function FeedPage() {
           }}>
             <ActionBtn
               onClick={async () => {
-                if (credited[job.job_id]) return; // one credit per viewer
+                if (credited[job.job_id]) return;
                 try {
                   const { credits } = await giveCredit(job.job_id);
                   setCredited(c => ({ ...c, [job.job_id]: true }));
@@ -427,16 +496,8 @@ export default function FeedPage() {
               label={String(creditCounts[job.job_id] ?? 0)}
               active={!!credited[job.job_id]}
             />
-            <ActionBtn
-              onClick={() => setCommenting(true)}
-              icon={<IconComment />}
-              label="Comment"
-            />
-            <ActionBtn
-              onClick={handleShare}
-              icon={<IconShare />}
-              label="Share"
-            />
+            <ActionBtn onClick={() => setCommenting(true)} icon={<IconComment />} label="Comment" />
+            <ActionBtn onClick={handleShare} icon={<IconShare />} label="Share" />
             <ActionBtn
               onClick={() => setSaved(s => ({ ...s, [job.job_id]: !s[job.job_id] }))}
               icon={<IconBookmark filled={!!saved[job.job_id]} />}
@@ -454,24 +515,14 @@ export default function FeedPage() {
               pointerEvents: "none",
             }}>{toast}</div>
           )}
-        </div>
+        </SwipeCard>
 
-        {/* Navigation */}
-        <div style={{ display: "flex", gap: "16px", marginTop: "16px", alignItems: "center" }}>
-          <button onClick={goPrev} disabled={current === 0}
-            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "50%", width: "40px", height: "40px", fontSize: "18px", cursor: current === 0 ? "not-allowed" : "pointer", opacity: current === 0 ? 0.3 : 1, color: "var(--fg)" }}>↑</button>
-          <div style={{ textAlign: "center" }}>
-            {sectionLabel && (
-              <p style={{ fontSize: "10px", fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px" }}>{sectionLabel}</p>
-            )}
-            <span style={{ fontSize: "13px", color: "var(--fg-muted)" }}>{videoItems.indexOf(job) + 1} / {videoItems.length}</span>
-          </div>
-          <button onClick={goNext} disabled={current === items.length - 1}
-            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "50%", width: "40px", height: "40px", fontSize: "18px", cursor: current === items.length - 1 ? "not-allowed" : "pointer", opacity: current === items.length - 1 ? 0.3 : 1, color: "var(--fg)" }}>↓</button>
-        </div>
+        {/* Counter below card — no buttons */}
+        <p style={{ fontSize: "12px", color: "var(--fg-muted)", marginTop: "12px" }}>
+          {videoIdx + 1} / {videoItems.length}
+        </p>
       </div>
 
-      {/* Comment drawer */}
       {commenting && <CommentDrawer jobId={job.job_id} onClose={() => setCommenting(false)} />}
     </>
   );

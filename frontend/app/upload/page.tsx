@@ -10,20 +10,49 @@ const RESULT_STYLE: Record<string, React.CSSProperties> = {
   flagged:  { border: "1px solid #b4550044", background: "#b455000d" },
   blocked:  { border: "1px solid #7f1d1d55", background: "#7f1d1d0d" },
 };
-
 const RESULT_COLOR: Record<string, string> = {
   approved: "#7ba3ff",
   flagged:  "#fb923c",
   blocked:  "#f87171",
 };
 
+type Format = "video" | "clip";
+
+const FORMAT_OPTIONS: { id: Format; label: string; sub: string; ratio: string; icon: React.ReactNode }[] = [
+  {
+    id: "video",
+    label: "Video",
+    sub: "Landscape · 16:9",
+    ratio: "16 / 9",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
+  {
+    id: "clip",
+    label: "Clip",
+    sub: "Portrait · 9:16",
+    ratio: "9 / 16",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="6" y="2" width="12" height="20" rx="2" />
+        <polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
+];
+
 export default function UploadPage() {
-  const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile]         = useState<File | null>(null);
+  const router    = useRouter();
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const [format, setFormat]       = useState<Format>("clip");
+  const [file, setFile]           = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError]       = useState("");
-  const [job, setJob]           = useState<Job | null>(null);
+  const [error, setError]         = useState("");
+  const [job, setJob]             = useState<Job | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -32,6 +61,14 @@ export default function UploadPage() {
   }, [router]);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  // Clear selected file when format changes — aspect ratios differ
+  function switchFormat(f: Format) {
+    setFormat(f);
+    setFile(null);
+    setJob(null);
+    setError("");
+  }
 
   async function handleUpload() {
     if (!file) return;
@@ -53,9 +90,10 @@ export default function UploadPage() {
   }
 
   const status = job?.overall_status ?? "";
+  const isClip = format === "clip";
 
   return (
-    <div style={{ maxWidth: "520px", margin: "0 auto" }}>
+    <div style={{ maxWidth: "560px", margin: "0 auto" }}>
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--fg)" }}>Upload</h1>
         <p style={{ fontSize: "13px", color: "var(--fg-muted)", marginTop: "4px" }}>
@@ -63,33 +101,116 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {/* Drop zone */}
-      <div
-        onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setFile(f); }}
-        onDragOver={e => e.preventDefault()}
-        onClick={() => inputRef.current?.click()}
-        style={{
-          border: `2px dashed ${file ? "var(--accent)" : "var(--border)"}`,
-          borderRadius: "14px", padding: "48px 24px",
-          textAlign: "center", cursor: "pointer",
-          background: "var(--surface)", transition: "border-color 0.15s",
-        }}
-      >
-        <input ref={inputRef} type="file" accept="video/*" style={{ display: "none" }}
-               onChange={e => setFile(e.target.files?.[0] ?? null)} />
-        {file ? (
-          <>
-            <p style={{ fontWeight: 600, color: "var(--fg)" }}>{file.name}</p>
-            <p style={{ fontSize: "12px", color: "var(--fg-muted)", marginTop: "4px" }}>
-              {(file.size / 1024 / 1024).toFixed(1)} MB
-            </p>
-          </>
-        ) : (
-          <>
-            <p style={{ fontWeight: 500, color: "var(--fg-muted)" }}>Drop a video here</p>
-            <p style={{ fontSize: "12px", color: "var(--fg-muted)", marginTop: "4px", opacity: 0.6 }}>or click to browse</p>
-          </>
-        )}
+      {/* Format toggle */}
+      <div style={{ marginBottom: "24px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+          Format
+        </p>
+        <div style={{ display: "flex", gap: "10px" }}>
+          {FORMAT_OPTIONS.map(opt => {
+            const active = format === opt.id;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => switchFormat(opt.id)}
+                style={{
+                  flex: 1, display: "flex", alignItems: "center", gap: "12px",
+                  padding: "14px 16px", borderRadius: "12px", cursor: "pointer",
+                  background: active ? "var(--accent)" : "var(--surface)",
+                  border: active ? "none" : "1px solid var(--border)",
+                  color: active ? "#fff" : "var(--fg-muted)",
+                  transition: "all 0.15s", textAlign: "left",
+                }}
+              >
+                {/* Aspect-ratio preview thumbnail */}
+                <div style={{
+                  flexShrink: 0,
+                  width: opt.id === "video" ? "36px" : "20px",
+                  height: opt.id === "video" ? "20px" : "36px",
+                  borderRadius: "4px",
+                  background: active ? "rgba(255,255,255,0.25)" : "var(--bg)",
+                  border: active ? "none" : "1px solid var(--border)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: active ? "#fff" : "var(--fg-muted)",
+                }}>{opt.icon}</div>
+
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: "14px", margin: 0, color: active ? "#fff" : "var(--fg)" }}>
+                    {opt.label}
+                  </p>
+                  <p style={{ fontSize: "11px", margin: "2px 0 0", opacity: active ? 0.8 : 0.6 }}>
+                    {opt.sub}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Drop zone — shape matches selected format */}
+      <div style={{ display: "flex", justifyContent: isClip ? "center" : "stretch" }}>
+        <div
+          onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setFile(f); }}
+          onDragOver={e => e.preventDefault()}
+          onClick={() => inputRef.current?.click()}
+          style={{
+            border: `2px dashed ${file ? "var(--accent)" : "var(--border)"}`,
+            borderRadius: "14px",
+            cursor: "pointer",
+            background: "var(--surface)",
+            transition: "border-color 0.15s",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            textAlign: "center",
+            // Clip: narrow portrait box; Video: full-width landscape box
+            ...(isClip
+              ? { width: "160px", aspectRatio: "9 / 16", padding: "16px 12px" }
+              : { width: "100%",  aspectRatio: "16 / 9", padding: "24px" }),
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept="video/*"
+            style={{ display: "none" }}
+            onChange={e => setFile(e.target.files?.[0] ?? null)}
+          />
+          {file ? (
+            <>
+              <p style={{ fontWeight: 600, color: "var(--fg)", fontSize: "13px", wordBreak: "break-all" }}>{file.name}</p>
+              <p style={{ fontSize: "11px", color: "var(--fg-muted)", marginTop: "4px" }}>
+                {(file.size / 1024 / 1024).toFixed(1)} MB
+              </p>
+            </>
+          ) : (
+            <>
+              {/* Icon */}
+              <div style={{ marginBottom: "10px", opacity: 0.4, color: "var(--fg-muted)" }}>
+                {isClip ? (
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="6" y="2" width="12" height="20" rx="2" />
+                    <polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none" />
+                  </svg>
+                ) : (
+                  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="2" y="5" width="20" height="14" rx="2" />
+                    <polygon points="10 9 15 12 10 15 10 9" fill="currentColor" stroke="none" />
+                  </svg>
+                )}
+              </div>
+              <p style={{ fontWeight: 500, color: "var(--fg-muted)", fontSize: "13px" }}>
+                Drop {isClip ? "a clip" : "a video"} here
+              </p>
+              <p style={{ fontSize: "11px", color: "var(--fg-muted)", marginTop: "4px", opacity: 0.6 }}>
+                or click to browse
+              </p>
+              <p style={{ fontSize: "10px", color: "var(--fg-muted)", marginTop: "8px", opacity: 0.45 }}>
+                {isClip ? "Portrait 9:16 recommended" : "Landscape 16:9 recommended"}
+              </p>
+            </>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -109,7 +230,7 @@ export default function UploadPage() {
           opacity: (!file || uploading) ? 0.45 : 1, transition: "opacity 0.15s",
         }}
       >
-        {uploading ? "Processing…" : "Submit for moderation"}
+        {uploading ? "Processing…" : `Submit ${format === "clip" ? "clip" : "video"} for moderation`}
       </button>
 
       {/* Result */}
