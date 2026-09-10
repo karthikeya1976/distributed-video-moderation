@@ -246,6 +246,8 @@ def check_todos(tracked: set[Path]) -> list[str]:
     for p in tracked:
         if p.suffix not in scan_exts:
             continue
+        if p.name == "scan-repo.py":   # exclude the scanner itself
+            continue
         try:
             text = p.read_text(errors="ignore")
         except Exception:
