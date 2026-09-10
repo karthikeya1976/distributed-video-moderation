@@ -139,27 +139,60 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
     return result
 
 
-def get_feed(limit: int = 50) -> list[dict[str, Any]]:
-    """Return approved and flagged videos — the public viewer feed (blocked content is excluded).
-    JOINs with users to include creator name and department."""
-    sql = """
-        SELECT v.*, u.name AS creator_name, u.department AS creator_department
-        FROM videos v
-        LEFT JOIN users u ON v.user_id = u.id::text
-        WHERE v.overall_status IN ('approved', 'flagged')
-        ORDER BY v.created_at DESC
-        LIMIT %s
+def get_feed(limit: int = 50, viewer_id: Optional[str] = None) -> dict[str, Any]:
+    """Return the smart feed split into two buckets:
+    - 'enrouted': approved videos from creators the viewer follows (newest first)
+    - 'recommended': remaining approved videos ranked by creator credits + recency
+
+    If viewer_id is None (logged-out), only the recommended bucket is populated.
     """
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (limit,))
-            rows = cur.fetchall()
-    result = []
-    for row in rows:
-        d = dict(row)
-        d["_id"] = d.pop("id")
-        result.append(d)
-    return result
+
+            enrouted: list[dict] = []
+            if viewer_id:
+                cur.execute("""
+                    SELECT v.*, u.name AS creator_name, u.department AS creator_department,
+                           u.credits AS creator_credits
+                    FROM videos v
+                    JOIN users u ON v.user_id = u.id::text
+                    JOIN follows f ON f.following_id = u.id
+                    WHERE v.overall_status IN ('approved', 'flagged')
+                      AND f.follower_id = %s::uuid
+                    ORDER BY v.created_at DESC
+                    LIMIT %s
+                """, (viewer_id, limit))
+                enrouted = [dict(r) for r in cur.fetchall()]
+
+            # Exclude already-enrouted video ids from recommendations
+            enrouted_ids = tuple(r["id"] for r in enrouted) or ("",)
+
+            cur.execute("""
+                SELECT v.*, u.name AS creator_name, u.department AS creator_department,
+                       u.credits AS creator_credits
+                FROM videos v
+                JOIN users u ON v.user_id = u.id::text
+                WHERE v.overall_status IN ('approved', 'flagged')
+                  AND v.id NOT IN %s
+                ORDER BY
+                    u.credits DESC,
+                    v.created_at DESC
+                LIMIT %s
+            """, (enrouted_ids, limit))
+            recommended = [dict(r) for r in cur.fetchall()]
+
+    def _normalise(rows: list[dict]) -> list[dict]:
+        out = []
+        for row in rows:
+            d = dict(row)
+            d["_id"] = d.pop("id")
+            out.append(d)
+        return out
+
+    return {
+        "enrouted": _normalise(enrouted),
+        "recommended": _normalise(recommended),
+    }
 
 
 def create_user(name: str, email: str, password_hash: str) -> dict:

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Search, Upload, User } from "lucide-react";
+import { Home, Search, Upload, User } from "lucide-react";
 import { isLoggedIn, isCreator } from "@/lib/auth";
 
 type NavItem = {
@@ -14,6 +14,7 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
+  { href: "/feed",    label: "Home",    icon: <Home   size={20} /> },
   { href: "/search",  label: "Search",  icon: <Search size={20} /> },
   { href: "/upload",  label: "Upload",  icon: <Upload size={20} />, creatorOnly: true },
 ];

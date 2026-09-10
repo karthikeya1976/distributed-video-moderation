@@ -129,8 +129,15 @@ export async function listJobs(): Promise<Job[]> {
   return res.json();
 }
 
-export async function getFeed(): Promise<Job[]> {
-  const res = await fetch(`${API}/feed`);
+export type FeedResponse = {
+  enrouted: Job[];
+  recommended: Job[];
+};
+
+export async function getFeed(): Promise<FeedResponse> {
+  const token = getToken();
+  const url = token ? `${API}/feed?token=${token}` : `${API}/feed`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Feed failed: ${res.status}`);
   return res.json();
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { getFeed, giveCredit, followCreator, unfollowCreator, getComments, postComment, type Job, type Comment } from "@/lib/api";
+import { getFeed, giveCredit, followCreator, unfollowCreator, getComments, postComment, type Job, type Comment, type FeedResponse } from "@/lib/api";
 import { isLoggedIn } from "@/lib/auth";
 
 /* ── SVG icon components ─────────────────────────────────────────────────── */
@@ -165,9 +165,17 @@ function CommentDrawer({ jobId, onClose }: { jobId: string; onClose: () => void 
   );
 }
 
+/* ── Section divider item (not a real video) ─────────────────────────────── */
+type SectionDivider = { _divider: true; label: string };
+type FeedItem = Job | SectionDivider;
+function isDivider(item: FeedItem): item is SectionDivider {
+  return "_divider" in item;
+}
+
 /* ── Main feed page ──────────────────────────────────────────────────────── */
 export default function FeedPage() {
-  const [jobs, setJobs]               = useState<Job[]>([]);
+  const [feed, setFeed]               = useState<FeedResponse>({ enrouted: [], recommended: [] });
+  const [items, setItems]             = useState<FeedItem[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState("");
   const [current, setCurrent]         = useState(0);
@@ -182,30 +190,68 @@ export default function FeedPage() {
 
   useEffect(() => {
     getFeed()
-      .then(setJobs)
+      .then(data => {
+        setFeed(data);
+        // Build ordered item list: enrouted first (with section header), then recommended
+        const list: FeedItem[] = [];
+        if (data.enrouted.length > 0) {
+          list.push({ _divider: true, label: "Following" });
+          list.push(...data.enrouted);
+        }
+        if (data.recommended.length > 0) {
+          list.push({ _divider: true, label: "Recommended" });
+          list.push(...data.recommended);
+        }
+        setItems(list);
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  // Play current, pause others
+  // Collect only real video items for playback control
+  const videoItems = items.filter((i): i is Job => !isDivider(i));
+
+  // Play current video item, pause others
   useEffect(() => {
-    jobs.forEach((job, i) => {
+    // Find which video index corresponds to the current item index
+    let videoIdx = 0;
+    for (let i = 0; i <= current && i < items.length; i++) {
+      if (!isDivider(items[i])) videoIdx = i;
+    }
+    videoItems.forEach((job, i) => {
       const el = videoRefs.current[job.job_id];
       if (!el) return;
-      if (i === current) { el.play().catch(() => {}); setPaused(false); }
-      else               { el.pause(); el.currentTime = 0; }
+      if (items[current] === job) { el.play().catch(() => {}); setPaused(false); }
+      else { el.pause(); el.currentTime = 0; }
     });
-  }, [current, jobs]);
+  }, [current, items, videoItems]);
+
+  const currentJob = !isDivider(items[current]) ? (items[current] as Job) : null;
 
   const togglePause = useCallback(() => {
-    const el = videoRefs.current[jobs[current]?.job_id];
+    if (!currentJob) return;
+    const el = videoRefs.current[currentJob.job_id];
     if (!el) return;
     if (el.paused) { el.play(); setPaused(false); }
     else           { el.pause(); setPaused(true); }
-  }, [current, jobs]);
+  }, [currentJob]);
 
-  const goNext = useCallback(() => setCurrent(c => Math.min(c + 1, jobs.length - 1)), [jobs.length]);
-  const goPrev = useCallback(() => setCurrent(c => Math.max(c - 1, 0)), []);
+  // Skip over dividers when navigating
+  const goNext = useCallback(() => {
+    setCurrent(c => {
+      let next = c + 1;
+      while (next < items.length && isDivider(items[next])) next++;
+      return Math.min(next, items.length - 1);
+    });
+  }, [items]);
+
+  const goPrev = useCallback(() => {
+    setCurrent(c => {
+      let prev = c - 1;
+      while (prev > 0 && isDivider(items[prev])) prev--;
+      return Math.max(prev, 0);
+    });
+  }, [items]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -233,15 +279,30 @@ export default function FeedPage() {
   if (error) return (
     <div style={{ color: "#f87171", background: "#7f1d1d22", border: "1px solid #7f1d1d55", borderRadius: "10px", padding: "12px 16px", fontSize: "13px" }}>{error}</div>
   );
-  if (jobs.length === 0) return (
+  if (videoItems.length === 0) return (
     <div style={{ textAlign: "center", paddingTop: "80px", color: "var(--fg-muted)" }}>
       <p style={{ fontSize: "16px", fontWeight: 500 }}>No videos yet.</p>
       <p style={{ fontSize: "13px", marginTop: "6px" }}>Upload filmmaking content to get started.</p>
     </div>
   );
 
-  const job = jobs[current];
+  // If current item is a divider, show it instead of the reel
+  const currentItem = items[current];
+  if (isDivider(currentItem)) {
+    // Auto-advance past dividers after a brief moment
+    setTimeout(() => goNext(), 600);
+  }
+
+  const job = currentJob ?? videoItems[0];
   const initials = (job.creator_name ?? "?").charAt(0).toUpperCase();
+
+  // Label for the section the current video belongs to
+  const sectionLabel = (() => {
+    for (let i = current; i >= 0; i--) {
+      if (isDivider(items[i])) return (items[i] as SectionDivider).label;
+    }
+    return null;
+  })();
 
   return (
     <>
@@ -404,9 +465,14 @@ export default function FeedPage() {
         <div style={{ display: "flex", gap: "16px", marginTop: "16px", alignItems: "center" }}>
           <button onClick={goPrev} disabled={current === 0}
             style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "50%", width: "40px", height: "40px", fontSize: "18px", cursor: current === 0 ? "not-allowed" : "pointer", opacity: current === 0 ? 0.3 : 1, color: "var(--fg)" }}>↑</button>
-          <span style={{ fontSize: "13px", color: "var(--fg-muted)" }}>{current + 1} / {jobs.length}</span>
-          <button onClick={goNext} disabled={current === jobs.length - 1}
-            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "50%", width: "40px", height: "40px", fontSize: "18px", cursor: current === jobs.length - 1 ? "not-allowed" : "pointer", opacity: current === jobs.length - 1 ? 0.3 : 1, color: "var(--fg)" }}>↓</button>
+          <div style={{ textAlign: "center" }}>
+            {sectionLabel && (
+              <p style={{ fontSize: "10px", fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px" }}>{sectionLabel}</p>
+            )}
+            <span style={{ fontSize: "13px", color: "var(--fg-muted)" }}>{videoItems.indexOf(job) + 1} / {videoItems.length}</span>
+          </div>
+          <button onClick={goNext} disabled={current === items.length - 1}
+            style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "50%", width: "40px", height: "40px", fontSize: "18px", cursor: current === items.length - 1 ? "not-allowed" : "pointer", opacity: current === items.length - 1 ? 0.3 : 1, color: "var(--fg)" }}>↓</button>
         </div>
       </div>
 

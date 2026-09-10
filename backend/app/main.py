@@ -120,24 +120,40 @@ async def upload_video(file: UploadFile, user_id: str = Depends(_require_creator
 
 
 @app.get("/feed")
-def get_feed(limit: int = 50) -> list:
-    """Public feed — approved videos only, visible to all viewers."""
-    jobs = db.get_feed(limit)
-    for j in jobs:
-        j["job_id"] = j.pop("_id")
-        if "pillar_results" in j:
-            j["pillars"] = j.pop("pillar_results")
-        # Derive the S3 object key from the stored file_path (s3://bucket/key)
-        file_path = j.get("file_path", "")
-        if file_path.startswith("s3://"):
-            object_name = file_path.split("/", 3)[-1]
-            try:
-                j["video_url"] = storage.get_presigned_url(object_name)
-            except Exception:
+def get_feed(limit: int = 50, token: Optional[str] = None) -> dict:
+    """Smart feed — returns {enrouted, recommended} buckets.
+    Pass ?token=<jwt> to personalise with enrouted content.
+    Both buckets contain approved/flagged videos with presigned S3 URLs."""
+    viewer_id = None
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            viewer_id = payload["sub"]
+        except JWTError:
+            pass
+
+    data = db.get_feed(limit, viewer_id)
+
+    def _enrich(jobs: list) -> list:
+        for j in jobs:
+            j["job_id"] = j.pop("_id")
+            if "pillar_results" in j:
+                j["pillars"] = j.pop("pillar_results")
+            file_path = j.get("file_path", "")
+            if file_path.startswith("s3://"):
+                object_name = file_path.split("/", 3)[-1]
+                try:
+                    j["video_url"] = storage.get_presigned_url(object_name)
+                except Exception:
+                    j["video_url"] = None
+            else:
                 j["video_url"] = None
-        else:
-            j["video_url"] = None
-    return jobs
+        return jobs
+
+    return {
+        "enrouted":    _enrich(data["enrouted"]),
+        "recommended": _enrich(data["recommended"]),
+    }
 
 
 @app.get("/videos")
