@@ -24,3 +24,10 @@ AWS_ACCESS_KEY_ID     = os.environ.get("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 AWS_S3_BUCKET         = os.environ.get("AWS_S3_BUCKET", "")
 AWS_S3_REGION         = os.environ.get("AWS_S3_REGION", "us-east-2")
+
+# Sightengine — adult content + deepfake detection
+SIGHTENGINE_USER   = os.environ.get("SIGHTENGINE_USER", "")
+SIGHTENGINE_SECRET = os.environ.get("SIGHTENGINE_SECRET", "")
+
+# AWS Rekognition — filmmaking relevance (uses same IAM role as S3 on EC2)
+# No extra keys needed on EC2; local dev can reuse AWS_ACCESS_KEY_ID/SECRET above.

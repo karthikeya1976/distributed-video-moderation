@@ -5,7 +5,7 @@ from celery import Celery
 
 from app import config, db, storage
 from app.decision_engine import aggregate
-from app.pillars import adult_content, ai_deepfake, copyright_match, filmmaking_relevance
+from app.pillars import adult_content, ai_deepfake, duplicate_content, filmmaking_relevance
 
 celery_app = Celery(
     "video_moderation",
@@ -18,7 +18,7 @@ async def _run_pillars(job_id: str) -> list[dict]:
     return await asyncio.gather(
         adult_content.check(job_id),
         ai_deepfake.check(job_id),
-        copyright_match.check(job_id),
+        duplicate_content.check(job_id),
         filmmaking_relevance.check(job_id),
     )
 

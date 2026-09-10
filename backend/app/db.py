@@ -48,6 +48,9 @@ def _ensure_schema() -> None:
         with conn.cursor() as cur:
             cur.execute(_CREATE_TABLE)
             cur.execute(_CREATE_USERS_TABLE)
+            # Migrations for columns added after initial schema
+            cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL")
+            cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS file_hash TEXT")
 
 
 
@@ -168,3 +171,16 @@ def upgrade_to_creator(user_id: str, department: str) -> dict:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, (department, user_id))
             return dict(cur.fetchone())
+
+
+def find_duplicate_hash(file_hash: str, exclude_job_id: str) -> bool:
+    """Return True if another completed video with the same SHA-256 hash exists."""
+    sql = """
+        SELECT 1 FROM videos
+        WHERE file_hash = %s AND id != %s AND status = 'done'
+        LIMIT 1
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (file_hash, exclude_job_id))
+            return cur.fetchone() is not None

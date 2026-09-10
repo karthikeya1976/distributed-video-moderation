@@ -5,13 +5,13 @@ flow-graph architecture. See docs/moderation_policies.md for threshold rules.
 """
 
 BLOCK_THRESHOLDS = {
-    "adult_content": 0.8,
-    "copyright_match": 0.6,
+    "adult_content": 0.8,       # explicit nudity → blocked
+    "duplicate_content": 1.0,   # exact duplicate → blocked
 }
 
 FLAG_THRESHOLDS = {
-    "adult_content": 0.5,
-    "ai_deepfake": 0.7,
+    "adult_content": 0.5,   # borderline nudity → flagged for review
+    "ai_deepfake": 0.7,     # likely AI-generated → flagged
 }
 
 # Pillars where a LOW score triggers a block (relevance checks, not harm checks)
