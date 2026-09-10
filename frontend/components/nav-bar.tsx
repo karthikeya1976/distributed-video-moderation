@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Clapperboard, Search, Upload, User, LogOut } from "lucide-react";
-import { isLoggedIn, isCreator, clearAuth } from "@/lib/auth";
+import { Clapperboard, Search, Upload, User } from "lucide-react";
+import { isLoggedIn, isCreator } from "@/lib/auth";
 
 type NavItem = {
   href: string;
@@ -16,12 +16,10 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/search",  label: "Search",  icon: <Search size={20} /> },
   { href: "/upload",  label: "Upload",  icon: <Upload size={20} />, creatorOnly: true },
-  { href: "/profile", label: "Profile", icon: <User   size={20} /> },
 ];
 
 export default function NavBar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [loggedIn, setLoggedIn] = useState(false);
   const [creator, setCreator]   = useState(false);
 
@@ -29,11 +27,6 @@ export default function NavBar() {
     setLoggedIn(isLoggedIn());
     setCreator(isCreator());
   }, [pathname]);
-
-  function handleLogout() {
-    clearAuth();
-    router.push("/");
-  }
 
   if (!loggedIn) return null;
 
@@ -82,21 +75,29 @@ export default function NavBar() {
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="px-2 pb-4">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-2 py-2.5 rounded-lg w-full transition-colors"
-          style={{ color: "var(--fg-muted)" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--accent-bg)"; (e.currentTarget as HTMLElement).style.color = "var(--fg)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--fg-muted)"; }}
-        >
-          <LogOut size={20} className="shrink-0" />
-          <span className="text-sm font-medium whitespace-nowrap
-                           opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            Log out
-          </span>
-        </button>
+      {/* Profile — pinned to bottom */}
+      <div className="px-2 pb-4" style={{ borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
+        {(() => {
+          const active = pathname === "/profile";
+          return (
+            <Link
+              href="/profile"
+              className="flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors"
+              style={{
+                background: active ? "var(--accent)" : "transparent",
+                color: active ? "#fff" : "var(--fg-muted)",
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "var(--accent-bg)"; (e.currentTarget as HTMLElement).style.color = "var(--fg)"; }}
+              onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--fg-muted)"; } }}
+            >
+              <User size={20} className="shrink-0" />
+              <span className="text-sm font-medium whitespace-nowrap
+                               opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                Profile
+              </span>
+            </Link>
+          );
+        })()}
       </div>
     </aside>
   );
