@@ -27,6 +27,8 @@ export type Job = {
   reasons?: string[];
   size_bytes?: number;
   user_id?: string;
+  creator_name?: string;
+  creator_department?: string;
   video_url?: string | null;
   created_at: string;
   updated_at: string;

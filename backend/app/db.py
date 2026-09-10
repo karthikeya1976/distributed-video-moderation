@@ -116,8 +116,16 @@ def list_jobs(limit: int = 50) -> list[dict[str, Any]]:
 
 
 def get_feed(limit: int = 50) -> list[dict[str, Any]]:
-    """Return approved and flagged videos — the public viewer feed (blocked content is excluded)."""
-    sql = "SELECT * FROM videos WHERE overall_status IN ('approved', 'flagged') ORDER BY created_at DESC LIMIT %s"
+    """Return approved and flagged videos — the public viewer feed (blocked content is excluded).
+    JOINs with users to include creator name and department."""
+    sql = """
+        SELECT v.*, u.name AS creator_name, u.department AS creator_department
+        FROM videos v
+        LEFT JOIN users u ON v.user_id = u.id::text
+        WHERE v.overall_status IN ('approved', 'flagged')
+        ORDER BY v.created_at DESC
+        LIMIT %s
+    """
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, (limit,))
