@@ -1,121 +1,206 @@
-# Distributed Video Moderation Platform
+# Redactor
 
-A fully local, runnable distributed video moderation system built with
-FastAPI, Celery, Redis, MinIO, MongoDB, and a Next.js dashboard.
+**A filmmaker discovery platform with AI-powered video moderation.**
+
+Creators upload showreels; the platform runs them through a distributed moderation pipeline (nudity detection, AI/deepfake detection, duplicate check, filmmaking relevance) before they appear in the public feed.
+
+🌐 **Live**: https://distributed-video-moderation.vercel.app  
+🔌 **API**: https://redactor-api.duckdns.org
+
+---
 
 ## Architecture
 
 ```
-[Next.js Frontend :3000]
-        |  upload video
-        v
-[FastAPI API :8088]  -->  [MinIO :9000]  (object storage)
-        |
-        v
-[Redis :6380]  (task queue)
-        |
-        v
-[Celery Worker(s)]
-   |         |          |
-   v         v          v
-Adult     AI/Deepfake  Copyright
-Content   Detection    Match
-   |         |          |
-   +---------+----------+
-             |
-             v
-        [Aggregator]
-     approved / flagged / blocked
-             |
-             v
-        [MongoDB :27018]
-             |
-             v
-[FastAPI status endpoint] <-- [Dashboard polls every 3s]
+[Next.js Frontend — Vercel]
+        │  HTTPS POST (video file)
+        ▼
+[FastAPI Gateway — EC2 :8088]
+        │  save to S3 → instant ack {task_id}
+        ▼
+[ElastiCache Redis]  ← task queue
+        │
+        ▼
+[Celery Worker — EC2]
+   │         │           │            │
+   ▼         ▼           ▼            ▼
+Adult     AI/Deepfake  Duplicate   Filmmaking
+Content   (Sightengine) Content    Relevance
+(Sightengine)         (SHA-256    (AWS Rekognition)
+                       S3 hash)
+   │         │           │            │
+   └─────────┴───────────┴────────────┘
+                         │
+                  [Decision Engine]
+               approved / flagged / blocked
+                         │
+                         ▼
+              [RDS PostgreSQL — AWS]
+                         │
+                         ▼
+         [FastAPI /feed & /status endpoints]
+                         │
+                         ▼
+         [Next.js Feed — TikTok-style reel player]
 ```
 
-## How to Run
+### Key design decisions
+- **Pillars are swappable**: each exposes `async def check(job_id) -> dict` — mock vs real API is one file change
+- **S3 objects are kept** after processing so the feed can stream via presigned URLs
+- **Duplicate detection** uses SHA-256 hash — unique content per creator, zero API cost
+- **Filmmaking relevance uses inverse scoring** — low score = not filmmaking content = blocked
+- **No scores in the feed** — clean viewer UX; scores only shown at upload time
 
-### 1. Start infrastructure (Docker required)
-```bash
-docker compose up -d
-```
-This starts Redis (port 6380), MinIO (9000/9001), and MongoDB (27018).
+---
 
-### 2. Start the API server
-```bash
-cd backend
-venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8088
-```
+## Tech Stack
 
-### 3. Start a Celery worker
-```bash
-cd backend
-venv\Scripts\python -m celery -A app.tasks.celery_app worker --loglevel=info --pool=solo
-```
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16, React 19, Tailwind CSS (dark theme, selenium blue) |
+| API Gateway | FastAPI + Uvicorn |
+| Task Queue | Celery + Redis (ElastiCache) |
+| Storage | AWS S3 (video files + frame extraction) |
+| Database | PostgreSQL 15 (RDS) |
+| Moderation | Sightengine (nudity + deepfake), AWS Rekognition (scene labels) |
+| Infra | AWS EC2 t3.small, CloudFormation, Nginx, Let's Encrypt |
+| Auth | JWT (`python-jose`), bcrypt (`passlib`) |
 
-### 4. Start the Next.js dashboard
-```bash
-cd frontend
-npm run dev
-```
+---
 
-Open **http://localhost:3000** — upload a video, then go to the Dashboard to
-watch it process in real time.
+## Moderation Pillars
 
-### Scaling demo (multiple workers)
-Open 3 terminal windows and run the Step 3 command in each. Then upload
-several videos quickly. Each worker picks up jobs from the shared Redis queue
-and processes them in parallel — you'll see multiple jobs moving through
-`processing → done` simultaneously.
+| Pillar | API | Threshold | Action |
+|--------|-----|-----------|--------|
+| `adult_content` | Sightengine nudity-2.1 | score ≥ 0.8 → blocked, ≥ 0.5 → flagged | Only explicit nudity (not romance) |
+| `ai_deepfake` | Sightengine genai | score ≥ 0.7 → flagged | AI-generated / synthetic media |
+| `duplicate_content` | SHA-256 S3 hash | score = 1.0 → blocked | Same file already on platform |
+| `filmmaking_relevance` | AWS Rekognition DetectLabels | score < 0.3 → blocked | Off-topic content removed |
+
+---
 
 ## API Reference
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Liveness check |
-| POST | `/videos` | Upload a video (multipart form, field `file`) |
-| GET | `/videos` | List all jobs (newest first) |
-| GET | `/videos/{job_id}/status` | Get full job result |
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/health` | — | Liveness check |
+| POST | `/auth/register` | — | Create account |
+| POST | `/auth/login` | — | Get JWT token |
+| POST | `/auth/upgrade` | JWT | Upgrade viewer → creator |
+| POST | `/videos` | JWT (creator) | Upload video for moderation |
+| GET | `/videos/{job_id}/status` | — | Poll moderation result |
+| GET | `/feed` | — | Approved + flagged videos (public) |
 
-### Job response shape (after processing)
+### Upload response
+```json
+{ "status": "processing", "task_id": "uuid" }
+```
+
+### Status response (after processing)
 ```json
 {
   "job_id": "uuid",
-  "filename": "video.mp4",
+  "filename": "showreel.mp4",
   "status": "done",
-  "overall_status": "approved | flagged | blocked",
-  "reasons": ["adult_content: score 0.93 >= 0.8 (blocked threshold)"],
+  "overall_status": "approved",
+  "reasons": [],
   "pillars": [
-    {"pillar": "adult_content", "score": 0.93, "flags": [{"timestamp": "00:00:07", "label": "suggestive_content"}]},
-    {"pillar": "ai_deepfake",   "score": 0.41, "flags": []},
-    {"pillar": "copyright_match","score": 0.58, "flags": []}
+    { "pillar": "adult_content",       "score": 0.02, "flags": [] },
+    { "pillar": "ai_deepfake",         "score": 0.11, "flags": [] },
+    { "pillar": "duplicate_content",   "score": 0.0,  "flags": [] },
+    { "pillar": "filmmaking_relevance","score": 0.5,  "flags": [] }
   ],
-  "size_bytes": 50000,
-  "created_at": "...",
-  "updated_at": "..."
+  "video_url": "https://s3.amazonaws.com/...",
+  "creator_name": "Karthikeya",
+  "creator_department": "Cinematography"
 }
 ```
 
-## How to Explain This in an Interview
+---
+
+## Local Development
+
+### Prerequisites
+- Python 3.9+, Node.js 18+, Docker
+
+### 1. Start local infrastructure
+```bash
+docker compose up -d   # Redis + PostgreSQL
+```
+
+### 2. Configure environment
+```bash
+cp .env.example .env
+# Fill in: POSTGRES_URL, REDIS_URL, AWS_S3_BUCKET, AWS_S3_REGION,
+#          AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+#          SIGHTENGINE_USER, SIGHTENGINE_SECRET, JWT_SECRET
+```
+
+### 3. Start the API
+```bash
+cd backend
+python -m venv .venv && .venv/Scripts/activate   # Windows
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8088
+```
+
+### 4. Start a Celery worker
+```bash
+cd backend
+python -m celery -A app.tasks worker --loglevel=info --pool=solo
+```
+
+### 5. Start the frontend
+```bash
+cd frontend
+# Create frontend/.env.local:
+# NEXT_PUBLIC_API_URL=http://localhost:8088
+npm install && npm run dev
+```
+
+Open **http://localhost:3000**
+
+---
+
+## AWS Deployment
+
+Infrastructure is defined in `infra/cloudformation.yml`:
+
+```bash
+aws cloudformation deploy \
+  --template-file infra/cloudformation.yml \
+  --stack-name redactor-v2 \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+      DBPassword=<password> \
+      JWTSecret=<secret> \
+      S3Bucket=<bucket-name>
+```
+
+EC2 runs systemd services `redactor-api` and `redactor-celery` (auto-restart on crash, enabled on boot).
+
+---
+
+## Interview Cheat Sheet
 
 | Question | Answer |
 |----------|--------|
-| **What does this system do?** | Intercepts video uploads and runs them through three safety checks (adult content, AI/deepfake detection, copyright) asynchronously before a video is cleared for public viewing. |
-| **Why FastAPI?** | High-performance async Python web framework — handles file uploads without blocking, native async support fits the async-worker model. |
-| **Why Redis + Celery?** | Redis is the message broker — the API drops a job onto the queue without waiting for processing. Celery workers pick it up asynchronously. This decouples the upload from the slow moderation work and lets you scale workers independently. |
-| **Why MinIO?** | S3-compatible object storage running locally. In production this would be Cloudflare R2 or AWS S3. The code only changes in `config.py` (endpoint/credentials). |
-| **Why MongoDB?** | Schema-flexible document store — each job document grows as results arrive (pending → processing → done + pillar scores), without needing schema migrations. |
-| **What are the three pillars?** | Adult Content (would use Sightengine/AWS Rekognition), AI/Deepfake (Sightengine GenAI/Hive), Copyright (Pex/ACRCloud). Each is a pluggable module with the same `async def check(job_id) -> dict` interface — swapping mock for real API is one file change. |
-| **How does the aggregator work?** | Reads all three pillar scores, applies thresholds from `docs/moderation_policies.md` (e.g., adult > 0.8 → Blocked), returns `approved/flagged/blocked` + a list of reasons. |
-| **How did you improve throughput?** | Running multiple Celery workers picks up tasks from the shared Redis queue in parallel — horizontal scaling with no code changes. |
-| **What's the dashboard polling interval?** | 3 seconds while any job is still in `pending/processing` state; stops polling once all jobs are `done`. |
-| **What would you change for production?** | Replace mock pillars with real API clients, swap MinIO for S3/R2, add webhook callbacks (so workers push results instead of writing to DB directly), add auth, rate limiting, and dead-letter queues for failed moderation calls. |
+| **What does this do?** | Filmmakers upload showreels; a distributed pipeline checks for nudity, AI-generated content, duplicates, and filmmaking relevance before the video appears in a TikTok-style reel feed. |
+| **Why FastAPI + Celery?** | FastAPI returns an instant acknowledgment (`task_id`) while Celery processes the video asynchronously. The upload endpoint never blocks — it drops a job on the Redis queue and returns immediately. |
+| **Why Redis?** | Acts as the Celery message broker and result backend. Decouples the API from the workers — you can scale workers horizontally without touching the API. |
+| **Why S3?** | Videos persist beyond the EC2 instance and are streamed directly to the browser via time-limited presigned URLs — EC2 never proxies video bytes. |
+| **How does frame extraction work?** | OpenCV (`cv2`) downloads the video from S3 to a temp file, extracts 5 evenly-spaced frames as JPEGs, uploads them to S3 with presigned URLs, and sends those URLs to Sightengine/Rekognition. Temp frames are deleted after checking. |
+| **How does duplicate detection work?** | SHA-256 hash of the full video file is computed on upload and stored in PostgreSQL. If another row has the same hash, the video is flagged as duplicate. Zero API cost, exact-match only. |
+| **How does filmmaking relevance work?** | AWS Rekognition `DetectLabels` on a mid-video frame returns scene labels. Labels matching a filmmaking/creative vocabulary (camera, person, performance, landscape, etc.) increase the score. Score < 0.3 → blocked. |
+| **Why inverse scoring for filmmaking?** | Most pillars block high scores (more harm = higher score). Relevance is the opposite — a low score means off-topic content. `BLOCK_BELOW_THRESHOLDS` in the decision engine handles this case separately. |
+| **What's the auth model?** | JWT tokens signed with HS256. Two account types: `viewer` (can browse feed) and `creator` (can upload). Viewers self-upgrade by selecting their filmmaking department. |
+| **What would you change for production?** | Add webhook callbacks so workers push results instead of polling; add rate limiting and dead-letter queues; use CloudFront in front of S3 for CDN-cached video delivery; add frame-level audio analysis for better deepfake detection. |
+
+---
 
 ## Project Docs
-- `docs/project_spec.md` — product spec and roadmap
-- `docs/architecture.md` — system design and component breakdown
-- `docs/moderation_policies.md` — per-pillar thresholds and aggregation rules
-- `docs/project_status.md` — milestone tracker
-- `docs/changelog.md` — implementation history
-- `CLAUDE.md` — project context and guidelines (six areas)
+- `docs/project_spec.md` — product spec and roadmap  
+- `docs/architecture.md` — system design and component breakdown  
+- `docs/moderation_policies.md` — per-pillar thresholds and aggregation rules  
+- `docs/project_status.md` — milestone tracker  
+- `docs/changelog.md` — implementation history  
