@@ -18,13 +18,29 @@ from app.pillars.common import score_from_seed
 
 _RELEVANCE_THRESHOLD = 0.3
 
-# Labels Rekognition may return that indicate filmmaking content
+# Labels Rekognition may return that indicate filmmaking or creative content.
+# Broad set covers: film gear, performance, narrative, creative arts, and
+# general human storytelling — all valid content for the Redactor platform.
 _FILMMAKING_LABELS = {
+    # Film & production gear
     "camera", "film", "movie", "cinema", "director", "cinematography",
     "tripod", "lighting", "crew", "studio", "clapperboard", "clapper",
-    "microphone", "boom", "set", "actor", "actress", "scene", "production",
-    "equipment", "lens", "monitor", "screen", "projector", "reel",
-    "photography", "video", "recording", "television", "broadcast",
+    "microphone", "boom", "set", "production", "equipment", "lens",
+    "monitor", "screen", "projector", "reel", "photography", "video",
+    "recording", "television", "broadcast",
+    # Performance & acting
+    "actor", "actress", "person", "people", "human", "face", "portrait",
+    "performance", "theatre", "theater", "stage", "dance", "dancing",
+    "music", "musician", "concert", "singer", "band",
+    # Narrative & creative arts
+    "art", "artistic", "creative", "animation", "cartoon", "drawing",
+    "painting", "illustration", "design", "graphic",
+    # Sports & action (sports docs, action sequences)
+    "sport", "sports", "action", "athlete", "athletics", "competition",
+    "race", "game", "match",
+    # Nature & landscape (valid for cinematography)
+    "nature", "landscape", "outdoors", "sky", "sunset", "sunrise",
+    "urban", "city", "architecture", "street",
 }
 
 
@@ -86,8 +102,8 @@ async def check(job_id: str) -> dict:
         matches = detected & _FILMMAKING_LABELS
 
         # Score = fraction of filmmaking labels found, capped at 1.0
-        # Even 1 strong match gives a decent score; 3+ gives full marks
-        score = min(1.0, len(matches) / 3.0)
+        # 1 match → 0.5, 2 matches → 1.0 (generous scoring for creative content)
+        score = min(1.0, len(matches) / 2.0)
 
         flags = []
         if score < _RELEVANCE_THRESHOLD:
