@@ -14,21 +14,31 @@ const chip: React.CSSProperties = {
 
 export default function SearchPage() {
   const router = useRouter();
-  const [q, setQ]               = useState("");
-  const [results, setResults]   = useState<SearchResult | null>(null);
-  const [loading, setLoading]   = useState(false);
+  const [q, setQ]                 = useState("");
+  const [results, setResults]     = useState<SearchResult | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const [apiError, setApiError]   = useState("");
   const [following, setFollowing] = useState<Record<string, boolean>>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounced search: fires 350ms after the user stops typing
+  // Debounced search: fires 400ms after the user stops typing
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    if (!q.trim()) { setResults(null); return; }
+    const trimmed = q.trim();
+    if (!trimmed) { setResults(null); setApiError(""); return; }
     timerRef.current = setTimeout(async () => {
       setLoading(true);
-      try { setResults(await searchAll(q.trim())); }
-      finally { setLoading(false); }
-    }, 350);
+      setApiError("");
+      try {
+        const data = await searchAll(trimmed);
+        setResults(data);
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : "Search failed");
+        setResults(null);
+      } finally {
+        setLoading(false);
+      }
+    }, 400);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [q]);
 
@@ -59,7 +69,7 @@ export default function SearchPage() {
 
       {/* Search input */}
       <div style={{ position: "relative", marginBottom: "24px" }}>
-        <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--fg-muted)" }}
+        <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--fg-muted)", pointerEvents: "none" }}
           width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
@@ -67,35 +77,72 @@ export default function SearchPage() {
           value={q}
           onChange={e => handleInput(e.target.value)}
           placeholder="Search creators, departments, videos…"
+          autoFocus
           style={{
-            width: "100%", paddingLeft: "42px", paddingRight: "14px",
+            width: "100%", paddingLeft: "42px", paddingRight: "42px",
             paddingTop: "12px", paddingBottom: "12px",
             background: "var(--surface)", border: "1px solid var(--border)",
             borderRadius: "12px", fontSize: "14px", color: "var(--fg)", outline: "none",
             boxSizing: "border-box",
           }}
         />
+        {/* Clear button */}
+        {q && !loading && (
+          <button onClick={() => setQ("")} style={{
+            position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+            background: "none", border: "none", cursor: "pointer", color: "var(--fg-muted)",
+            fontSize: "18px", lineHeight: 1, padding: "2px 4px",
+          }}>×</button>
+        )}
+        {/* Loading spinner dot */}
         {loading && (
-          <div style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", fontSize: "12px", color: "var(--fg-muted)" }}>
-            Searching…
+          <div style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", display: "flex", gap: "3px" }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{
+                width: "5px", height: "5px", borderRadius: "50%", background: "var(--accent)",
+                animation: `pulse 1s ${i * 0.2}s infinite`,
+              }} />
+            ))}
           </div>
         )}
       </div>
 
-      {/* Empty state */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.2; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1.2); }
+        }
+      `}</style>
+
+      {/* Empty start state */}
       {!q && (
         <div style={{ textAlign: "center", paddingTop: "60px", color: "var(--fg-muted)" }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ margin: "0 auto 12px", display: "block", opacity: 0.4 }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+            style={{ margin: "0 auto 12px", display: "block", opacity: 0.35 }}>
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <p style={{ fontSize: "14px" }}>Search for filmmakers or showreels</p>
+          <p style={{ fontSize: "14px", fontWeight: 500 }}>Find filmmakers on Editor Club</p>
+          <p style={{ fontSize: "12px", marginTop: "6px", opacity: 0.6 }}>Search by name, department, or video title</p>
+        </div>
+      )}
+
+      {/* API error */}
+      {apiError && (
+        <div style={{ padding: "12px 16px", borderRadius: "10px", background: "#7f1d1d22", border: "1px solid #7f1d1d55", fontSize: "13px", color: "#f87171", marginBottom: "16px" }}>
+          Could not reach search — check your connection. ({apiError})
         </div>
       )}
 
       {/* No results */}
-      {q && !loading && results && !hasResults && (
-        <div style={{ textAlign: "center", paddingTop: "60px", color: "var(--fg-muted)" }}>
-          <p style={{ fontSize: "14px" }}>No results for &ldquo;{q}&rdquo;</p>
+      {q && !loading && !apiError && results && !hasResults && (
+        <div style={{ textAlign: "center", paddingTop: "48px", color: "var(--fg-muted)" }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+            style={{ margin: "0 auto 10px", display: "block", opacity: 0.35 }}>
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            <line x1="8" y1="8" x2="14" y2="14" strokeWidth="2"/><line x1="14" y1="8" x2="8" y2="14" strokeWidth="2"/>
+          </svg>
+          <p style={{ fontSize: "14px", fontWeight: 500 }}>No results for &ldquo;{q}&rdquo;</p>
+          <p style={{ fontSize: "12px", marginTop: "6px", opacity: 0.6 }}>Try a shorter word or check the spelling</p>
         </div>
       )}
 
