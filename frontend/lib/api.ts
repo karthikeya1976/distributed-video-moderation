@@ -1,6 +1,11 @@
 import { getToken } from "./auth";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8088";
+// All API calls go through Next.js's rewrite proxy at /api/backend.
+// next.config.ts maps  /api/backend/* → https://redactor-api.duckdns.org/*  on Vercel,
+// and  /api/backend/* → http://localhost:8088/*  locally (via the rewrites source/destination).
+// This avoids mixed-content blocks (HTTPS Vercel page → HTTP EC2) entirely — the browser
+// always calls its own origin; Next.js does the server-side proxy hop.
+const API = "/api/backend";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
