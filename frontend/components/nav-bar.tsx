@@ -39,9 +39,9 @@ export default function NavBar() {
                  w-14 hover:w-52 transition-all duration-200 ease-in-out"
       style={{ background: "var(--surface)", borderRight: "1px solid var(--border)" }}
     >
-      {/* Logo */}
-      <div className="flex items-center px-4 py-5 min-h-[64px] overflow-hidden"
-           style={{ borderBottom: "1px solid var(--border)" }}>
+      {/* Logo — navigates to home feed */}
+      <Link href="/feed" className="flex items-center px-4 py-5 min-h-[64px] overflow-hidden"
+           style={{ borderBottom: "1px solid var(--border)", textDecoration: "none" }}>
         {/* Collapsed: show "EC" monogram; expanded: show full name */}
         <span className="font-black text-base tracking-tight whitespace-nowrap shrink-0
                          group-hover:hidden"
@@ -53,7 +53,7 @@ export default function NavBar() {
               style={{ color: "var(--accent)" }}>
           Editor Club
         </span>
-      </div>
+      </Link>
 
       {/* Links */}
       <nav className="flex flex-col gap-1 px-2 pt-4 flex-1">

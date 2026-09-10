@@ -1,15 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { searchAll, followCreator, unfollowCreator, type SearchResult } from "@/lib/api";
 import { isLoggedIn } from "@/lib/auth";
-
-function debounce<T extends (...args: Parameters<T>) => void>(fn: T, ms: number) {
-  let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
-}
 
 const chip: React.CSSProperties = {
   fontSize: "11px", fontWeight: 600, padding: "2px 8px",
@@ -23,20 +18,22 @@ export default function SearchPage() {
   const [results, setResults]   = useState<SearchResult | null>(null);
   const [loading, setLoading]   = useState(false);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const doSearch = useCallback(
-    debounce(async (val: string) => {
-      if (!val.trim()) { setResults(null); return; }
+  // Debounced search: fires 350ms after the user stops typing
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!q.trim()) { setResults(null); return; }
+    timerRef.current = setTimeout(async () => {
       setLoading(true);
-      try { setResults(await searchAll(val)); }
+      try { setResults(await searchAll(q.trim())); }
       finally { setLoading(false); }
-    }, 350),
-    []
-  );
+    }, 350);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [q]);
 
   function handleInput(val: string) {
     setQ(val);
-    doSearch(val);
   }
 
   async function toggleFollow(creatorId: string, currentlyFollowing: boolean) {
