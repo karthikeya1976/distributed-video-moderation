@@ -1,136 +1,115 @@
-# Distributed Video Moderation Platform
+# Editor Club
 
-A locally-runnable, mocked version of a distributed video moderation
-pipeline: FastAPI + Celery + Redis + PostgreSQL backend (temp disk storage),
-Next.js dashboard frontend.
+A filmmaker discovery platform with AI-powered video moderation.  
+FastAPI + Celery + Redis + PostgreSQL backend on AWS EC2.  
+Next.js 16 frontend on Vercel.
+
+---
 
 ## Area 1: Project Goals
 
-- Build, from scratch, a working version of the "Distributed Video
-  Moderation System" described on the user's resume, so it can be
-  confidently explained and demoed end-to-end.
-- Keep everything free and runnable locally: no paid third-party APIs or
-  cloud accounts required. Real services (Sightengine, Pex, AWS Rekognition)
-  are represented as pluggable mock "pillar" modules that can be swapped for
-  real API clients later without changing the architecture.
-- Beginner-friendly: explain Python/FastAPI/Celery/Docker/Next.js concepts
-  as they're introduced, since the user is new to building this kind of
-  system.
-- Preserve the "multi-pillar" framing from the original briefing (Adult
-  Content, AI/Deepfake, Copyright) and the distributed/async/scalable story
-  (Redis queue, Celery workers, horizontal scaling).
+- Build a working version of the "Distributed Video Moderation System" from the resume — demonstrable and explainable end-to-end.
+- Creators upload scenes and shots; a distributed pipeline checks for nudity, AI-generated content, duplicates, and filmmaking relevance before content appears in the public reel feed.
+- Social layer: viewers follow creators (Enroute/Deroute), give credits, comment, and discover content through a smart feed and search.
+- Deployed on real AWS infrastructure (EC2, RDS, ElastiCache, S3) with real moderation APIs (Sightengine, AWS Rekognition).
+
+---
 
 ## Area 2: Architecture Overview
 
 ```
-[Next.js Frontend]
-      │ HTTP POST (video file)
+[Next.js — Vercel HTTPS]
+      │ /api/backend/* (same-origin rewrite → redactor-api.duckdns.org)
       ▼
-[FastAPI Gateway] → save to UPLOAD_DIR (temp disk) → Redis Queue → Celery Worker
-                  ← instant ack: {"status":"processing","task_id":"..."}
-                                                              │
-                                         [Mock Pillars (Moderation Worker placeholder)]
-                                                              │
-                                                 [Decision Engine]
-                                                              │ SQL write
-                                                              ▼
-                                                   [PostgreSQL Database]
-                                                              │
-                                         [FastAPI status endpoint] → [Next.js dashboard]
+[Nginx + Let's Encrypt — EC2]
+      ▼
+[FastAPI — :8088]
+  ├── Auth:    /auth/register  /auth/login  /auth/upgrade
+  ├── Video:   POST /videos  GET /videos/{id}/status
+  ├── Feed:    GET /feed  (enrouted + recommended buckets)
+  ├── Social:  /creators/*  /search  /videos/{id}/comments  /videos/{id}/credit
+      │
+      │ Redis queue (Celery)
+      ▼
+[Celery Worker]
+  ├── adult_content    (Sightengine nudity-2.1)
+  ├── ai_deepfake      (Sightengine genai)
+  ├── duplicate_content (SHA-256 S3 hash)
+  └── filmmaking_relevance (AWS Rekognition DetectLabels)
+      │
+      ▼
+[Decision Engine] → approved / flagged / blocked
+      │
+      ▼
+[RDS PostgreSQL] — videos, users, follows, comments
 ```
 
-- **Backend** (`backend/app/`): FastAPI gateway (`main.py`), Celery tasks
-  (`tasks.py`), temp disk storage helpers (`storage.py`), DB helpers
-  (`db.py` for PostgreSQL), config (`config.py`), pillar modules
-  (`pillars/`), and the Decision Engine (`decision_engine.py`).
-- **Frontend** (`frontend/`): Next.js + Tailwind + shadcn/ui dashboard.
-- **Infra**: `docker-compose.yml` runs Redis and PostgreSQL only.
-- Full design rationale and data flow: `docs/architecture.md`.
-- Detailed scoring thresholds and aggregation rules:
-  `docs/moderation_policies.md`.
+Full design: `docs/architecture.md`  
+Threshold rules: `docs/moderation_policies.md`
+
+---
 
 ## Area 3: Design Style Guide
 
-- Python: keep modules small and single-purpose (one concern per file —
-  storage, db, config, each pillar, aggregator). Favor plain functions over
-  classes unless state genuinely needs to be encapsulated.
-- Each "pillar" module exposes the same async interface:
-  `async def check(job_id: str) -> dict` returning
-  `{"pillar": str, "score": float 0-1, "flags": [...]}` — this is what makes
-  pillars swappable (mock <-> real API) without touching the orchestration
-  code.
-- No premature abstraction: don't add config flags, retries, or error
-  handling for cases that can't currently happen. Add them when a real
-  integration needs them.
-- Frontend: Next.js App Router, Tailwind CSS, shadcn/ui components. Explain
-  React/Next.js concepts inline as they're introduced (this is new territory
-  for the user).
-- Comments only where the *why* isn't obvious from the code (e.g., why a
-  mock derives scores from a hash, why a port differs from the plan).
+- **Backend**: small single-purpose modules. `main.py` routes only — business logic in `db.py`, `storage.py`, `decision_engine.py`, `tasks.py`.
+- **Pillars**: each exposes `async def check(job_id: str) -> dict` returning `{"pillar", "score", "flags"}` — swappable without touching orchestration.
+- **Frontend**: Next.js App Router, Tailwind CSS, inline styles for component-specific overrides. No shadcn/ui (removed). CSS variables for theming (`--fg`, `--bg`, `--surface`, `--accent`, `--border`).
+- **API calls**: all use `/api/backend` prefix — routed through `next.config.ts` rewrite, never direct to EC2 IP.
+- **Auth**: JWT passed as `?token=<jwt>` on GET endpoints (avoids CORS preflight); `Authorization: Bearer` on POST/DELETE.
+- No premature abstraction — add retries, webhooks, rate-limiting only when a real need arises.
+
+---
 
 ## Area 4: Constraints & Policies
 
-- **No paid APIs / cloud accounts.** All three moderation pillars
-  (adult content, AI/deepfake, copyright) are mocked locally — see
-  `docs/moderation_policies.md` for thresholds.
-- **Local-only infra**: PostgreSQL (via Docker) stores all job data.
-  Uploaded files are written to `C:/tmp/video_uploads/` (temp local disk).
-- **Docker network limitation**: this machine's Docker cannot reach
-  pypi.org during image builds (SSL interception, likely VPN/AV). Therefore:
-  - Redis and PostgreSQL run via `docker compose` (prebuilt images, no pip
-    install needed).
-  - The FastAPI app and Celery worker run directly on Windows via a local
-    Python venv (`backend/venv`).
-  - Revisit containerizing the backend if/when the network issue is
-    resolved.
-- **Port assignments** (chosen to avoid conflicts with other running
-  containers/services on this machine):
-  - FastAPI API: **8088** (8080 was already in use)
-  - Redis: host **6380** → container 6379
-  - PostgreSQL: host **5433** → container 5432
+- **Real APIs**: Sightengine (nudity + deepfake), AWS Rekognition (filmmaking). SHA-256 for duplicate detection.
+- **AWS infra**: EC2 t3.small (Amazon Linux 2023), RDS PostgreSQL 15, ElastiCache Redis, S3 `amzn-s3-bucket-dvm`.
+- **EC2 runs as `ssm-user`**: no SSH key, access via AWS Session Manager. Repo lives at `/app`, owned by root — use `sudo git -C /app pull`.
+- **Systemd services**: `redactor-api` and `redactor-celery`. Restart both after any backend change: `sudo systemctl restart redactor-api redactor-celery`.
+- **No `.env` committed**: credentials in `.env` (gitignored). EC2 reads from systemd `EnvironmentFile`. See `.env.example` for required vars.
+- **Local dev ports**: API 8088, Redis 6380, PostgreSQL 5434.
+- **Frontend proxy**: `next.config.ts` rewrites `/api/backend/*` → `https://redactor-api.duckdns.org/*` on Vercel, `http://localhost:8088/*` locally.
+
+---
 
 ## Area 5: Repository Etiquette
 
-- Branch per milestone: `milestone-N-<short-name>`, merged into `main` once
-  that milestone's "Definition of Done" passes.
-- Commit at the end of each completed milestone (not mid-milestone), with a
-  message summarizing what was added.
-- `.gitignore` excludes `backend/venv/`, `node_modules/`, `.next/`,
-  `__pycache__/`, `uploads/`, `frames/`, `.env*`.
-- Update `docs/project_status.md` and `docs/changelog.md` as part of each
-  milestone's commit — don't let them drift from what's actually built.
+- Commit on logical feature boundaries with a clear message.
+- `.gitignore` covers: `backend/venv/`, `node_modules/`, `.next/`, `__pycache__/`, `uploads/`, `frames/`, `.env*`.
+- Run `python scripts/scan-repo.py` before committing to catch dead files, stale docs, and leaked secrets.
+- Update `docs/project_status.md` and `docs/changelog.md` with every significant change.
 
-## Area 6: Documentation
+---
 
-- `docs/project_spec.md` — the product specification: problem statement,
-  core features, and version roadmap (MVP/v1/v2/Later/Not in Scope), plus a
-  mapping table showing how each spec item maps to what's actually built in
-  this repo (mocked/local vs. real).
-- `docs/architecture.md` — system design, component breakdown, data flow
-  diagram, job document schema, and the local development topology
-  (expanded version of Area 2).
-- `docs/project_status.md` — checklist tracker of milestones/tasks. Use this
-  to pick up where the project left off — it reflects the true current state.
-- `docs/changelog.md` — dated entries describing what was implemented at
-  each step, including any deviations from the original plan (e.g., the
-  Docker workaround in Area 4) and why.
-- `docs/moderation_policies.md` — per-pillar score thresholds and the
-  aggregation rules that turn pillar scores into an overall
-  approved/flagged/blocked verdict.
-- Root `README.md` (added in Milestone 3) — setup/run instructions and an
-  "how to explain this project" cheat sheet for interviews.
+## Area 6: Key Files
 
-### Documentation update rule
+| File | Purpose |
+|------|---------|
+| `backend/app/main.py` | All FastAPI routes |
+| `backend/app/db.py` | All SQL queries + schema migrations |
+| `backend/app/tasks.py` | Celery task: runs pillars, writes verdict |
+| `backend/app/decision_engine.py` | Aggregates pillar scores → verdict |
+| `backend/app/storage.py` | S3 upload, presigned URL, cleanup |
+| `frontend/lib/api.ts` | Typed client for every backend endpoint |
+| `frontend/lib/auth.ts` | JWT localStorage helpers |
+| `frontend/next.config.ts` | Same-origin proxy rewrite |
+| `frontend/app/feed/page.tsx` | Swipeable reel feed |
+| `frontend/app/upload/page.tsx` | Scene/Shot upload with format toggle |
+| `scripts/scan-repo.py` | Repo health scanner (dead files, stale docs, secrets) |
+| `docs/architecture.md` | System design, feed algorithm, DB schema |
+| `docs/moderation_policies.md` | Per-pillar thresholds and aggregation rules |
+| `docs/project_status.md` | Milestone tracker (what's done / pending) |
+| `docs/changelog.md` | Implementation history |
 
-At the end of **every milestone, and after any major decision or deviation**
-(e.g., a scope change, a workaround like the Docker network issue, a new
-constraint), update:
-1. `docs/changelog.md` — append a dated entry describing what changed and why
-2. `docs/project_status.md` — check off completed items / add new ones
-3. `docs/architecture.md` and/or `docs/moderation_policies.md` — if the
-   design, data flow, schema, or thresholds changed
-4. `docs/project_spec.md` — if scope, roadmap, or the spec-to-build mapping
-   changed
+---
 
-Treat stale docs as a bug: if the docs don't match the code, fix the docs
-before moving to the next milestone.
+## Area 7: Documentation Update Rule
+
+After any feature, fix, or architectural change:
+1. `docs/changelog.md` — append a dated entry
+2. `docs/project_status.md` — check off items / add new ones
+3. `docs/architecture.md` — if system design or DB schema changed
+4. `docs/moderation_policies.md` — if pillar thresholds or logic changed
+5. `README.md` — if API surface, setup steps, or interview answers changed
+
+Stale docs = bug. Run `python scripts/scan-repo.py` to detect drift.
