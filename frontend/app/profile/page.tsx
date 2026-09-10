@@ -135,6 +135,33 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* Settings */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "14px", padding: "24px", marginBottom: "16px" }}>
+        <h2 style={{ fontSize: "15px", fontWeight: 700, color: "var(--fg)", marginBottom: "4px" }}>Settings</h2>
+        <p style={{ fontSize: "12px", color: "var(--fg-muted)", marginBottom: "16px" }}>Account preferences and controls</p>
+        {[
+          { label: "Notifications", desc: "Email alerts for new followers and credits" },
+          { label: "Privacy", desc: "Control who can see your profile and videos" },
+          { label: "Account", desc: "Change password or delete your account" },
+        ].map((s, i, arr) => (
+          <div key={s.label} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "14px 0",
+            borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none",
+          }}>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: "14px", color: "var(--fg)", margin: 0 }}>{s.label}</p>
+              <p style={{ fontSize: "12px", color: "var(--fg-muted)", margin: "2px 0 0" }}>{s.desc}</p>
+            </div>
+            <span style={{
+              fontSize: "11px", color: "var(--fg-muted)", background: "var(--bg)",
+              border: "1px solid var(--border)", borderRadius: "999px", padding: "2px 10px",
+              flexShrink: 0, marginLeft: "12px",
+            }}>Soon</span>
+          </div>
+        ))}
+      </div>
+
       {/* Logout */}
       <button
         onClick={() => { clearAuth(); router.push("/"); }}

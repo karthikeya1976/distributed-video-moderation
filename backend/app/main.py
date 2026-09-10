@@ -1,6 +1,7 @@
 import os
 import tempfile
 import uuid
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -159,3 +160,59 @@ def get_status(job_id: str) -> dict:
     if "pillar_results" in job:
         job["pillars"] = job.pop("pillar_results")
     return job
+
+
+# ── Credits ───────────────────────────────────────────────────────────────────
+
+@app.post("/videos/{job_id}/credit")
+def give_credit(job_id: str) -> dict:
+    """Add 1 credit to the creator of a video."""
+    new_total = db.add_credit(job_id)
+    return {"credits": new_total}
+
+
+# ── Follow / Unfollow ─────────────────────────────────────────────────────────
+
+def _require_auth(token: str = Depends(oauth2_scheme)) -> str:
+    """Decode JWT, return user_id. Any logged-in user can use this."""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return payload["sub"]
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+@app.post("/creators/{creator_id}/follow")
+def follow(creator_id: str, viewer_id: str = Depends(_require_auth)) -> dict:
+    db.follow_user(viewer_id, creator_id)
+    return {"following": True}
+
+
+@app.delete("/creators/{creator_id}/follow")
+def unfollow(creator_id: str, viewer_id: str = Depends(_require_auth)) -> dict:
+    db.unfollow_user(viewer_id, creator_id)
+    return {"following": False}
+
+
+@app.get("/creators/{creator_id}")
+def get_creator(creator_id: str, token: Optional[str] = None) -> dict:
+    viewer_id = None
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            viewer_id = payload["sub"]
+        except JWTError:
+            pass
+    profile = db.get_creator_profile(creator_id, viewer_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    return profile
+
+
+# ── Search ────────────────────────────────────────────────────────────────────
+
+@app.get("/search")
+def search(q: str = "") -> dict:
+    if not q.strip():
+        return {"creators": [], "videos": []}
+    return db.search(q.strip())

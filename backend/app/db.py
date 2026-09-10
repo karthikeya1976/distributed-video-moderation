@@ -31,7 +31,17 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     account_type  TEXT NOT NULL DEFAULT 'viewer',
     department    TEXT,
+    credits       INTEGER NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+_CREATE_FOLLOWS_TABLE = """
+CREATE TABLE IF NOT EXISTS follows (
+    follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (follower_id, following_id)
 );
 """
 
@@ -46,11 +56,13 @@ def _connect():
 def _ensure_schema() -> None:
     with _connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(_CREATE_TABLE)
             cur.execute(_CREATE_USERS_TABLE)
+            cur.execute(_CREATE_TABLE)
+            cur.execute(_CREATE_FOLLOWS_TABLE)
             # Migrations for columns added after initial schema
             cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL")
             cur.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS file_hash TEXT")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0")
 
 
 
@@ -192,3 +204,106 @@ def find_duplicate_hash(file_hash: str, exclude_job_id: str) -> bool:
         with conn.cursor() as cur:
             cur.execute(sql, (file_hash, exclude_job_id))
             return cur.fetchone() is not None
+
+
+# ── Credits ──────────────────────────────────────────────────────────────────
+
+def add_credit(video_id: str) -> int:
+    """Add 1 credit to the creator of a video. Returns new credit total."""
+    sql = """
+        UPDATE users SET credits = credits + 1
+        WHERE id = (SELECT user_id::uuid FROM videos WHERE id = %s)
+        RETURNING credits
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (video_id,))
+            row = cur.fetchone()
+    return row[0] if row else 0
+
+
+# ── Follows ───────────────────────────────────────────────────────────────────
+
+def follow_user(follower_id: str, following_id: str) -> None:
+    sql = """
+        INSERT INTO follows (follower_id, following_id)
+        VALUES (%s::uuid, %s::uuid)
+        ON CONFLICT DO NOTHING
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (follower_id, following_id))
+
+
+def unfollow_user(follower_id: str, following_id: str) -> None:
+    sql = "DELETE FROM follows WHERE follower_id = %s::uuid AND following_id = %s::uuid"
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (follower_id, following_id))
+
+
+def is_following(follower_id: str, following_id: str) -> bool:
+    sql = "SELECT 1 FROM follows WHERE follower_id = %s::uuid AND following_id = %s::uuid"
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (follower_id, following_id))
+            return cur.fetchone() is not None
+
+
+def get_creator_profile(creator_id: str, viewer_id: Optional[str] = None) -> Optional[dict]:
+    """Return creator public profile with follower count, credit total, and follow status."""
+    sql = """
+        SELECT u.id, u.name, u.department, u.account_type, u.credits, u.created_at,
+               COUNT(DISTINCT f.follower_id) AS follower_count,
+               COUNT(DISTINCT v.id) AS video_count
+        FROM users u
+        LEFT JOIN follows f ON f.following_id = u.id
+        LEFT JOIN videos v ON v.user_id = u.id::text AND v.overall_status IN ('approved','flagged')
+        WHERE u.id = %s::uuid
+        GROUP BY u.id
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (creator_id,))
+            row = cur.fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["id"] = str(d["id"])
+    d["is_following"] = is_following(viewer_id, creator_id) if viewer_id else False
+    return d
+
+
+# ── Search ────────────────────────────────────────────────────────────────────
+
+def search(query: str) -> dict:
+    """Search creators by name/department and videos by filename."""
+    like = f"%{query}%"
+
+    creator_sql = """
+        SELECT id, name, department, account_type, credits,
+               (SELECT COUNT(*) FROM follows WHERE following_id = u.id) AS follower_count
+        FROM users u
+        WHERE (name ILIKE %s OR department ILIKE %s) AND account_type = 'creator'
+        LIMIT 10
+    """
+    video_sql = """
+        SELECT v.id, v.filename, v.overall_status, v.created_at,
+               u.name AS creator_name, u.department AS creator_department
+        FROM videos v
+        LEFT JOIN users u ON v.user_id = u.id::text
+        WHERE v.filename ILIKE %s AND v.overall_status IN ('approved','flagged')
+        LIMIT 10
+    """
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(creator_sql, (like, like))
+            creators = [dict(r) for r in cur.fetchall()]
+            cur.execute(video_sql, (like,))
+            videos = [dict(r) for r in cur.fetchall()]
+
+    for c in creators:
+        c["id"] = str(c["id"])
+    for v in videos:
+        v["id"] = str(v["id"])
+    return {"creators": creators, "videos": videos}

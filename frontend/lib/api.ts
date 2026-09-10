@@ -134,3 +134,75 @@ export async function getFeed(): Promise<Job[]> {
   if (!res.ok) throw new Error(`Feed failed: ${res.status}`);
   return res.json();
 }
+
+// ── Credits ────────────────────────────────────────────────────────────────
+
+export async function giveCredit(jobId: string): Promise<{ credits: number }> {
+  const res = await fetch(`${API}/videos/${jobId}/credit`, { method: "POST" });
+  if (!res.ok) throw new Error("Credit failed");
+  return res.json();
+}
+
+// ── Follow ─────────────────────────────────────────────────────────────────
+
+export async function followCreator(creatorId: string): Promise<void> {
+  const token = getToken();
+  await fetch(`${API}/creators/${creatorId}/follow`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function unfollowCreator(creatorId: string): Promise<void> {
+  const token = getToken();
+  await fetch(`${API}/creators/${creatorId}/follow`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type CreatorProfile = {
+  id: string;
+  name: string;
+  department?: string;
+  account_type: string;
+  credits: number;
+  follower_count: number;
+  video_count: number;
+  is_following: boolean;
+};
+
+export async function getCreatorProfile(creatorId: string): Promise<CreatorProfile> {
+  const token = getToken();
+  const url = token
+    ? `${API}/creators/${creatorId}?token=${token}`
+    : `${API}/creators/${creatorId}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Creator not found");
+  return res.json();
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+
+export type SearchResult = {
+  creators: {
+    id: string;
+    name: string;
+    department?: string;
+    credits: number;
+    follower_count: number;
+  }[];
+  videos: {
+    id: string;
+    filename: string;
+    overall_status: string;
+    creator_name?: string;
+    creator_department?: string;
+  }[];
+};
+
+export async function searchAll(q: string): Promise<SearchResult> {
+  const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error("Search failed");
+  return res.json();
+}

@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { getFeed, type Job } from "@/lib/api";
+import { getFeed, giveCredit, followCreator, unfollowCreator, type Job } from "@/lib/api";
+import { isLoggedIn, getUser } from "@/lib/auth";
 
 /* ── SVG icon components ─────────────────────────────────────────────────── */
-function IconHeart({ filled }: { filled: boolean }) {
+function IconStar({ filled }: { filled: boolean }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill={filled ? "#f87171" : "none"}
-      stroke={filled ? "#f87171" : "#fff"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    <svg width="28" height="28" viewBox="0 0 24 24"
+      fill={filled ? "#fbbf24" : "none"}
+      stroke={filled ? "#fbbf24" : "#fff"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
   );
 }
@@ -147,16 +149,18 @@ function CommentDrawer({ job, onClose }: { job: Job; onClose: () => void }) {
 
 /* ── Main feed page ──────────────────────────────────────────────────────── */
 export default function FeedPage() {
-  const [jobs, setJobs]           = useState<Job[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState("");
-  const [current, setCurrent]     = useState(0);
-  const [liked, setLiked]         = useState<Record<string, boolean>>({});
-  const [saved, setSaved]         = useState<Record<string, boolean>>({});
-  const [paused, setPaused]       = useState(false);
-  const [commenting, setCommenting] = useState(false);
-  const [toast, setToast]         = useState("");
-  const videoRefs                 = useRef<Record<string, HTMLVideoElement | null>>({});
+  const [jobs, setJobs]               = useState<Job[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState("");
+  const [current, setCurrent]         = useState(0);
+  const [credited, setCredited]       = useState<Record<string, boolean>>({});
+  const [creditCounts, setCreditCounts] = useState<Record<string, number>>({});
+  const [saved, setSaved]             = useState<Record<string, boolean>>({});
+  const [following, setFollowing]     = useState<Record<string, boolean>>({});
+  const [paused, setPaused]           = useState(false);
+  const [commenting, setCommenting]   = useState(false);
+  const [toast, setToast]             = useState("");
+  const videoRefs                     = useRef<Record<string, HTMLVideoElement | null>>({});
 
   useEffect(() => {
     getFeed()
@@ -281,8 +285,8 @@ export default function FeedPage() {
                 border: "2px solid rgba(255,255,255,0.6)",
                 flexShrink: 0,
               }}>{initials}</div>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                   <p style={{ fontWeight: 700, fontSize: "14px", color: "#fff", margin: 0, textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                     {job.creator_name ?? "Unknown"}
                   </p>
@@ -299,6 +303,33 @@ export default function FeedPage() {
                 )}
               </div>
             </div>
+
+            {/* Enroute / Deroute button */}
+            {job.user_id && (
+              <button
+                onClick={() => {
+                  if (!isLoggedIn()) return;
+                  const creatorId = job.user_id!;
+                  const isF = following[creatorId] ?? false;
+                  setFollowing(f => ({ ...f, [creatorId]: !isF }));
+                  (isF ? unfollowCreator(creatorId) : followCreator(creatorId)).catch(() =>
+                    setFollowing(f => ({ ...f, [creatorId]: isF }))
+                  );
+                }}
+                style={{
+                  pointerEvents: "all",
+                  padding: "5px 16px", fontSize: "12px", fontWeight: 600,
+                  borderRadius: "999px", cursor: "pointer",
+                  background: following[job.user_id] ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.9)",
+                  color: following[job.user_id] ? "#fff" : "#111",
+                  border: "none",
+                  backdropFilter: "blur(4px)",
+                  transition: "all 0.15s",
+                }}
+              >
+                {following[job.user_id] ? "Deroute" : "Enroute"}
+              </button>
+            )}
           </div>
 
           {/* Right-side action buttons */}
@@ -307,10 +338,17 @@ export default function FeedPage() {
             display: "flex", flexDirection: "column", gap: "16px", alignItems: "center",
           }}>
             <ActionBtn
-              onClick={() => setLiked(l => ({ ...l, [job.job_id]: !l[job.job_id] }))}
-              icon={<IconHeart filled={!!liked[job.job_id]} />}
-              label="Like"
-              active={!!liked[job.job_id]}
+              onClick={async () => {
+                if (credited[job.job_id]) return; // one credit per viewer
+                try {
+                  const { credits } = await giveCredit(job.job_id);
+                  setCredited(c => ({ ...c, [job.job_id]: true }));
+                  setCreditCounts(c => ({ ...c, [job.job_id]: credits }));
+                } catch { /* silently ignore */ }
+              }}
+              icon={<IconStar filled={!!credited[job.job_id]} />}
+              label={String(creditCounts[job.job_id] ?? 0)}
+              active={!!credited[job.job_id]}
             />
             <ActionBtn
               onClick={() => setCommenting(true)}

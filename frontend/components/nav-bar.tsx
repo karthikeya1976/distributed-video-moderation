@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Clapperboard, Rss, Upload, User, LogOut } from "lucide-react";
+import { Clapperboard, Search, Upload, User, LogOut } from "lucide-react";
 import { isLoggedIn, isCreator, clearAuth } from "@/lib/auth";
 
 type NavItem = {
@@ -14,7 +14,7 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/feed",    label: "Feed",    icon: <Rss    size={20} /> },
+  { href: "/search",  label: "Search",  icon: <Search size={20} /> },
   { href: "/upload",  label: "Upload",  icon: <Upload size={20} />, creatorOnly: true },
   { href: "/profile", label: "Profile", icon: <User   size={20} /> },
 ];
