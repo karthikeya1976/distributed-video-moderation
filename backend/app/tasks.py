@@ -54,5 +54,5 @@ def process_video(job_id: str) -> None:
         },
     )
 
-    # Stage C analog: remove temp file after processing is complete
-    storage.cleanup_video(object_name)
+    # Note: S3 object is kept so the feed can stream the video via presigned URLs.
+    # cleanup_video() would delete it — only call that if storage cost becomes a concern.
