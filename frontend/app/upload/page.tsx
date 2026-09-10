@@ -22,7 +22,7 @@ const FORMAT_OPTIONS: { id: Format; label: string; sub: string; ratio: string; i
   {
     id: "scene",
     label: "Scene",
-    sub: "Landscape · 16:9",
+    sub: "16:9",
     ratio: "16 / 9",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -34,7 +34,7 @@ const FORMAT_OPTIONS: { id: Format; label: string; sub: string; ratio: string; i
   {
     id: "shot",
     label: "Shot",
-    sub: "Portrait · 9:16",
+    sub: "9:16",
     ratio: "9 / 16",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -206,7 +206,7 @@ export default function UploadPage() {
                 or click to browse
               </p>
               <p style={{ fontSize: "10px", color: "var(--fg-muted)", marginTop: "8px", opacity: 0.45 }}>
-                {isClip ? "Shot · Portrait 9:16" : "Scene · Landscape 16:9"}
+                {isClip ? "Shot · 9:16" : "Scene · 16:9"}
               </p>
             </>
           )}
