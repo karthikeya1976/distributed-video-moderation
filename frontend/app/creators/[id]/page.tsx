@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getCreatorProfile, followCreator, unfollowCreator, type CreatorProfile } from "@/lib/api";
-import { isLoggedIn, getToken } from "@/lib/auth";
+import { isLoggedIn } from "@/lib/auth";
 
 const chip: React.CSSProperties = {
   fontSize: "11px", fontWeight: 600, padding: "2px 8px",
@@ -31,7 +31,6 @@ export default function CreatorProfilePage() {
 
   useEffect(() => {
     if (!id) return;
-    const token = getToken() ?? undefined;
     getCreatorProfile(id)
       .then(p => {
         setProfile(p);

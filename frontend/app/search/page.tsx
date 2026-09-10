@@ -23,9 +23,8 @@ export default function SearchPage() {
 
   // Debounced search: fires 400ms after the user stops typing
   useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
     const trimmed = q.trim();
-    if (!trimmed) { setResults(null); setApiError(""); return; }
+    if (!trimmed) return;
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       setApiError("");
@@ -42,8 +41,16 @@ export default function SearchPage() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [q]);
 
+  // Clearing the query is a direct response to user input, not something
+  // the debounce effect needs to react to — handled here instead of as a
+  // synchronous setState at the top of the effect body.
   function handleInput(val: string) {
     setQ(val);
+    if (!val.trim()) {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setResults(null);
+      setApiError("");
+    }
   }
 
   async function toggleFollow(creatorId: string, currentlyFollowing: boolean) {
@@ -88,7 +95,7 @@ export default function SearchPage() {
         />
         {/* Clear button */}
         {q && !loading && (
-          <button onClick={() => setQ("")} style={{
+          <button onClick={() => handleInput("")} style={{
             position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
             background: "none", border: "none", cursor: "pointer", color: "var(--fg-muted)",
             fontSize: "18px", lineHeight: 1, padding: "2px 4px",

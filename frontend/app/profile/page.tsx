@@ -18,17 +18,19 @@ const inputStyle: React.CSSProperties = {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [user, setUser]           = useState<AuthUser | null>(null);
+  // getUser() is synchronous (reads localStorage) — compute the initial
+  // value lazily instead of via setState-in-effect, avoiding an extra render.
+  const [user, setUser]           = useState<AuthUser | null>(getUser);
   const [department, setDepartment] = useState(DEPARTMENTS[0]);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError]         = useState("");
   const [success, setSuccess]     = useState("");
 
+  // Redirecting is a real side effect (navigation), so it stays in an effect —
+  // only the state read above moved out.
   useEffect(() => {
-    const u = getUser();
-    if (!u) { router.replace("/"); return; }
-    setUser(u);
-  }, [router]);
+    if (!user) router.replace("/");
+  }, [user, router]);
 
   async function handleUpgrade(e: React.FormEvent) {
     e.preventDefault();

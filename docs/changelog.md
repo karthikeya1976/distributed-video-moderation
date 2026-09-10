@@ -92,3 +92,32 @@
 ### Repo health tooling
 - Added `scripts/scan-repo.py`: scans for tracked secrets, dead Python modules, dead frontend components, `.env.example` drift, stale docs (>30d), and TODO/FIXME markers. Run with `--fix` to auto-delete dead files.
 - Added `.git/hooks/pre-commit` (shell script): runs `scan-repo.py` before every commit. Blocks on secrets or `.env.example` drift; warns (non-blocking) on dead files, stale docs, and TODOs. Resolves Windows Python path by searching known install locations rather than relying on the `python3` shebang (which hits the Windows Store stub on Git Bash).
+
+## 2026-09-10 — CI/CD: PR Review Bot, Test Suites, Worktree Support
+
+### Test suites (new)
+- `tests/test_decision_engine.py`: 14 unit tests covering every threshold branch in `decision_engine.py` (block, flag, inverse-scoring, priority ordering, unknown-pillar no-op). Imports the module directly by path so it never needs a live Postgres connection (`app.main` calls `db._ensure_schema()` at import time, which does).
+- `frontend/lib/auth.test.ts`: 5 Vitest tests for `lib/auth.ts` (token/user round-trip, malformed-JSON handling, clear).
+- Added Vitest + jsdom to `frontend/package.json` (`npm test`), plus `npm run typecheck` (`tsc --noEmit`).
+- `backend/requirements.txt`: added `pytest==8.3.4`.
+
+### Lint gate hardened to zero-tolerance
+- Fixed 3 pre-existing `react-hooks/set-state-in-effect` errors (nav-bar, profile, search) by deriving state during render or via lazy `useState` initializers instead of `setState` inside a bare effect body — same behavior, no extra render pass.
+- Fixed 1 unused-variable warning in `app/creators/[id]/page.tsx` (dead `token` local — `getCreatorProfile` already reads the token internally).
+- `npm run lint` and `npm run typecheck` are now 100% clean — no baseline exceptions needed.
+
+### PR Review Bot (GitHub Actions)
+- `.github/workflows/pr-review-bot.yml`: on every PR into `main`, runs 3 jobs in sequence/parallel — `lint-typecheck` (eslint + tsc + backend `py_compile`), `artifact-scan` (build the frontend, verify output), `regression-tests` (both test suites vs. baseline) — then a `decision` job that auto-merges (squash) only if all three report `success`.
+- `.github/workflows/update-baseline.yml`: after every merge to `main`, re-runs both suites and commits a refreshed `.ci/baseline-results.json`, so the regression gate always compares against main's actual current state.
+- `scripts/verify_artifacts.py`: reads Next.js's own `app-path-routes-manifest.json` to check every declared route produced a non-empty server bundle file — no hardcoded page list to go stale.
+- `scripts/compare_baseline.py` / `scripts/generate_baseline.py`: parse JUnit XML from pytest + Vitest, diff against `.ci/baseline-results.json`. Blocks only on *new* regressions (a test that passed on `main` and now fails) — pre-existing failures don't permanently block the repo.
+- `scripts/review_bot.py`: takes `--check name=status` per job, merges via `gh pr merge --squash --auto` only if every status is exactly `success` — any other value (including `cancelled`) blocks.
+- `.ci/baseline-results.json`: initial baseline, 19/19 tests passing.
+
+### Worktrees for parallel agent work
+- `scripts/spawn-agent-worktree.sh <task-id> <slug>`: creates an isolated `git worktree` + branch (`agent/<task-id>/<slug>`) with its own `npm ci` / venv install, so multiple agents can work on separate branches simultaneously without sharing a working directory or lockfile.
+- `scripts/setup_branch_protection.sh`: one-time (not yet run) script to make the 3 CI jobs required status checks on `main`, with `enforce_admins: true`. Not applied automatically — enabling it blocks direct pushes to `main` for everyone, including solo maintainers, so it needs an explicit decision to run.
+
+### Not yet done
+- Branch protection is scripted but **not applied** to the live GitHub repo — run `sh scripts/setup_branch_protection.sh` when ready to require the bot's checks before merge.
+- `BOT_PAT` secret (fine-grained PAT scoped to `contents:write` + `pull-requests:write`) must be added to the repo's Actions secrets before the `decision` job can actually comment/merge.

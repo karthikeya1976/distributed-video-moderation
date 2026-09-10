@@ -77,6 +77,8 @@ Threshold rules: `docs/moderation_policies.md`
 - Commit on logical feature boundaries with a clear message.
 - `.gitignore` covers: `backend/venv/`, `node_modules/`, `.next/`, `__pycache__/`, `uploads/`, `frames/`, `.env*`.
 - A pre-commit hook (`.git/hooks/pre-commit`) runs `scripts/scan-repo.py` automatically before every `git commit`. It blocks on secrets / `.env.example` drift and warns on dead files / TODOs. Run `python scripts/scan-repo.py --fix` to interactively delete dead files.
+- **PRs** run `.github/workflows/pr-review-bot.yml`: lint/typecheck → build+artifact-scan → regression tests vs. baseline → auto-merge if all green. Branch protection is scripted (`scripts/setup_branch_protection.sh`) but **not yet applied** to `main` — run it only when ready to require these checks before every merge.
+- **Parallel agent work**: use `scripts/spawn-agent-worktree.sh <task-id> <slug>` to create an isolated git worktree + branch per agent, avoiding shared working-directory/lockfile collisions.
 - Update `docs/project_status.md` and `docs/changelog.md` with every significant change.
 
 ---
@@ -96,6 +98,13 @@ Threshold rules: `docs/moderation_policies.md`
 | `frontend/app/feed/page.tsx` | Swipeable reel feed |
 | `frontend/app/upload/page.tsx` | Scene/Shot upload with format toggle |
 | `scripts/scan-repo.py` | Repo health scanner (dead files, stale docs, secrets) |
+| `tests/test_decision_engine.py` | Unit tests for the decision engine (pure logic, no DB) |
+| `frontend/lib/auth.test.ts` | Unit tests for auth localStorage helpers |
+| `scripts/verify_artifacts.py` | CI: validates Next.js build output isn't corrupted/incomplete |
+| `scripts/compare_baseline.py` | CI: blocks PRs only on *new* test regressions vs. `main` |
+| `scripts/review_bot.py` | CI: auto-merge decision logic for the PR review bot |
+| `scripts/spawn-agent-worktree.sh` | Creates an isolated git worktree + branch per agent/task |
+| `.github/workflows/pr-review-bot.yml` | PR pipeline: lint/typecheck → artifact-scan → regression-tests → auto-merge |
 | `docs/architecture.md` | System design, feed algorithm, DB schema |
 | `docs/moderation_policies.md` | Per-pillar thresholds and aggregation rules |
 | `docs/project_status.md` | Milestone tracker (what's done / pending) |

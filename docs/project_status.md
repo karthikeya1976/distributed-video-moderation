@@ -101,9 +101,24 @@
 - [x] `scripts/scan-repo.py`: 6-check scanner (secrets, dead code, .env drift, stale docs, TODOs)
 - [x] `.git/hooks/pre-commit`: auto-runs scanner before every commit; blocks on critical issues, warns on non-blocking ones; Windows-compatible (shell script, not Python shebang)
 
+### CI/CD: PR Review Bot & Test Infrastructure (2026-09-10)
+- [x] `tests/test_decision_engine.py`: 14 unit tests, pure-logic (no DB) — every threshold branch covered
+- [x] `frontend/lib/auth.test.ts`: 5 Vitest tests for auth localStorage helpers
+- [x] `npm run lint` / `npm run typecheck` — both 100% clean, zero baseline exceptions
+- [x] `.github/workflows/pr-review-bot.yml`: lint-typecheck + artifact-scan + regression-tests → auto-merge on all-green
+- [x] `.github/workflows/update-baseline.yml`: refreshes `.ci/baseline-results.json` after every merge to `main`
+- [x] `scripts/verify_artifacts.py`: validates Next.js build output against its own routes manifest
+- [x] `scripts/compare_baseline.py` + `generate_baseline.py`: JUnit-based regression diffing
+- [x] `scripts/review_bot.py`: decision logic — merges only if every required job is exactly `success`
+- [x] `scripts/spawn-agent-worktree.sh`: isolated git worktree + branch per agent/task, own npm/pip install
+- [ ] **Not yet applied**: `scripts/setup_branch_protection.sh` — branch protection is scripted but not run against the live repo (would block direct pushes to `main` for everyone, including solo maintainer — needs an explicit go-ahead)
+- [ ] **Not yet configured**: `BOT_PAT` repo secret — required before the `decision` job can actually comment/merge PRs
+
 ## Pending / Future
 - [ ] Creator profile: list their approved videos inline
 - [ ] Notifications for new followers and credits received
 - [ ] Saved videos (bookmark persisted to DB, not just local state)
 - [ ] CloudFormation UserData fully automated (no manual `pip install` step)
 - [ ] Remove `/debug/feed` and `/debug/search` endpoints before public launch
+- [ ] Apply branch protection (`scripts/setup_branch_protection.sh`) once ready to enforce CI gates on `main`
+- [ ] Add `BOT_PAT` to GitHub Actions secrets so the review bot can merge PRs

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { Home, Search, Upload, User } from "lucide-react";
 import { isLoggedIn, isCreator } from "@/lib/auth";
 
@@ -21,13 +20,14 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function NavBar() {
   const pathname = usePathname();
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [creator, setCreator]   = useState(false);
 
-  useEffect(() => {
-    setLoggedIn(isLoggedIn());
-    setCreator(isCreator());
-  }, [pathname]);
+  // Auth state is read straight from localStorage on every render instead of
+  // being mirrored into useState — it's synchronous and cheap, and deriving
+  // it during render (rather than via a setState-in-effect) avoids the extra
+  // render pass React now warns about. Next.js re-renders this component on
+  // every navigation, so this naturally re-checks auth right after login/logout.
+  const loggedIn = isLoggedIn();
+  const creator = isCreator();
 
   if (!loggedIn) return null;
 
