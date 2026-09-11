@@ -112,7 +112,7 @@
 - [x] `scripts/review_bot.py`: decision logic — merges only if every required job is exactly `success`
 - [x] `scripts/spawn-agent-worktree.sh`: isolated git worktree + branch per agent/task, own npm/pip install
 - [ ] **Not yet applied**: `scripts/setup_branch_protection.sh` — branch protection is scripted but not run against the live repo (would block direct pushes to `main` for everyone, including solo maintainer — needs an explicit go-ahead)
-- [ ] **Not yet configured**: `BOT_PAT` repo secret — required before the `decision` job can actually comment/merge PRs
+- [x] `BOT_PAT` repo secret configured (2026-09-11) — decision job can now comment/merge PRs
 
 ## Pending / Future
 - [ ] Creator profile: list their approved videos inline
@@ -120,5 +120,4 @@
 - [ ] Saved videos (bookmark persisted to DB, not just local state)
 - [ ] CloudFormation UserData fully automated (no manual `pip install` step)
 - [ ] Remove `/debug/feed` and `/debug/search` endpoints before public launch
-- [ ] Apply branch protection (`scripts/setup_branch_protection.sh`) once ready to enforce CI gates on `main`
-- [ ] Add `BOT_PAT` to GitHub Actions secrets so the review bot can merge PRs
+- [ ] Apply branch protection (`scripts/setup_branch_protection.sh`) once a real PR has confirmed the bot merges successfully
